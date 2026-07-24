@@ -196,6 +196,34 @@ function MusicPlayerContent() {
       .finally(() => setLoading(false));
   }, [searchParams]);
 
+  // 목록 페이지(같은 출처의 다른 창/탭)에서 "재생목록에 추가" 요청을 받아 큐에 곡을 덧붙임
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "ADD_TO_PLAYLIST") return;
+
+      const trackId: string = event.data.trackId;
+      if (!trackId) return;
+
+      setTracks((prev) => {
+        if (prev.some((t) => t.id === trackId)) return prev; // 이미 있으면 중복 추가 방지
+
+        fetchTracks([trackId]).then(([newTrack]) => {
+          if (!newTrack) return;
+          setTracks((current) => {
+            if (current.some((t) => t.id === newTrack.id)) return current;
+            return [...current, newTrack];
+          });
+        });
+
+        return prev;
+      });
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   const currentTrack = tracks[currentIndex];
   const videoId = currentTrack ? extractVideoId(currentTrack.youtubeUrl) : "";
 
@@ -392,6 +420,12 @@ function MusicPlayerContent() {
                 }}
               />
             </div>
+
+            {tracks.length > 1 && (
+              <div className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
+                {currentIndex + 1} / {tracks.length}곡
+              </div>
+            )}
           </div>
 
           <div className="w-full md:w-1/2 lg:flex-1 flex flex-col justify-center px-6 md:pr-16 md:pl-8 py-10 md:py-0">

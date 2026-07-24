@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Typography } from "@/components/ui/typography";
 import { Icon } from "@/components/ui/icon";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import cn from "@/lib/utils/cn";
 
 interface SerializedTrack {
@@ -20,39 +18,10 @@ interface MusicPageClientProps {
   tracks: SerializedTrack[];
 }
 
-const extractVideoId = (url: string): string => {
-  try {
-    return new URL(url).searchParams.get("v") ?? "";
-  } catch {
-    return "";
-  }
-};
+const PLAYER_WINDOW_NAME = "conan-wiki-music-player";
 
 export function MusicPageClient({ tracks }: MusicPageClientProps) {
-  const router = useRouter();
-
-  const [activeTrackId, setActiveTrackId] = useState(tracks[0]?.id ?? "");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  const activeTrack = tracks.find((t) => t.id === activeTrackId) ?? tracks[0];
-  const activeIndex = tracks.findIndex((t) => t.id === activeTrack?.id);
-
-  const videoId = activeTrack ? extractVideoId(activeTrack.youtubeUrl) : "";
-
-  const player = useYouTubePlayer({
-    videoId,
-    onEnded: () => shiftTrack(1),
-  });
-
-  function shiftTrack(delta: number) {
-    if (tracks.length === 0) return;
-    const next = tracks[(activeIndex + delta + tracks.length) % tracks.length];
-    setActiveTrackId(next.id);
-  }
-
-  const playTrack = (trackId: string) => {
-    setActiveTrackId(trackId);
-  };
 
   const toggleSelect = (trackId: string) => {
     setSelectedIds((prev) => (prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId]));
@@ -64,27 +33,44 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
 
   const clearSelection = () => setSelectedIds([]);
 
-  // 단일 곡이면 쿼리스트링(공유 가능), 여러 곡이면 sessionStorage(같은 브라우저 한정)
+  // 재생 버튼: 새창으로 열되, 이미 열려있으면 그 창을 재사용
+  const playTrack = (trackId: string) => {
+    window.open(`/music/player?playId=${trackId}`, PLAYER_WINDOW_NAME);
+  };
+
+  // 선택된 여러 곡 재생: 단일 곡이면 쿼리스트링, 여러 곡이면 sessionStorage
   const playSelected = () => {
     if (selectedIds.length === 0) return;
 
     if (selectedIds.length === 1) {
-      router.push(`/music/player?playId=${selectedIds[0]}`);
+      window.open(`/music/player?playId=${selectedIds[0]}`, PLAYER_WINDOW_NAME);
       return;
     }
 
     sessionStorage.setItem("playlist", JSON.stringify(selectedIds));
-    router.push("/music/player");
+    window.open("/music/player", PLAYER_WINDOW_NAME);
   };
 
-  if (!activeTrack) {
+  // "재생목록에 추가": 플레이어 창이 열려있으면 postMessage로 곡 추가, 없으면 새로 재생 시작
+  const addToPlaylist = (trackId: string) => {
+    const playerWindow = window.open("", PLAYER_WINDOW_NAME);
+
+    if (!playerWindow || playerWindow.closed) {
+      window.open(`/music/player?playId=${trackId}`, PLAYER_WINDOW_NAME);
+      return;
+    }
+
+    playerWindow.postMessage({ type: "ADD_TO_PLAYLIST", trackId }, window.location.origin);
+    playerWindow.focus();
+  };
+
+  if (tracks.length === 0) {
     return <div className="p-8">등록된 곡이 없습니다.</div>;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <div ref={player.containerRef} className="fixed w-px h-px overflow-hidden opacity-0 pointer-events-none" />
-      <main className="max-w-[1120px] mx-auto px-6 py-8 pb-[140px]">
+      <main className="max-w-[1120px] mx-auto px-6 py-8">
         <Typography variant="h1" className="text-[26px] mb-1">
           OST 감상실
         </Typography>
@@ -117,7 +103,6 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
 
           <ul className="list-none m-0 p-0">
             {tracks.map((track) => {
-              const isActive = track.id === activeTrack.id;
               const isSelected = selectedIds.includes(track.id);
               const title = track.titles.find((t) => t.language === "ko")?.title ?? track.artist;
 
@@ -129,26 +114,24 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
                       onChange={() => toggleSelect(track.id)}
                       aria-label={`${title} 선택`}
                     />
+
                     <button
                       type="button"
                       onClick={() => playTrack(track.id)}
-                      aria-current={isActive ? "true" : undefined}
                       className="flex-1 flex items-center gap-3.5 cursor-pointer text-left"
                     >
-                      <span
-                        aria-hidden="true"
-                        className={cn("w-6 text-center", isActive ? "text-danger" : "text-muted-light")}
-                      >
-                        <Icon name={isActive && player.playing ? "pause" : "play"} size={13} className="mx-auto" />
+                      <span aria-hidden="true" className="w-6 text-center text-muted-light">
+                        <Icon name="play" size={13} className="mx-auto" />
                       </span>
-                      <span
-                        className={cn(
-                          "flex-1 text-sm",
-                          isActive ? "font-black text-danger" : "font-medium text-foreground",
-                        )}
-                      >
-                        {title}
-                      </span>
+                      <span className="flex-1 text-sm font-medium text-foreground">{title}</span>
+                    </button>
+
+                    <button
+                      onClick={() => addToPlaylist(track.id)}
+                      className="text-xs text-muted-light hover:text-primary px-2 cursor-pointer"
+                      title="재생 중인 목록에 추가"
+                    >
+                      + 재생목록
                     </button>
                   </div>
                 </li>
