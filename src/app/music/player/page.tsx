@@ -690,9 +690,35 @@ function MusicPlayerContent() {
     autoplay: shouldAutoplay,
   });
 
-  if (loading) return <div>불러오는 중...</div>;
-  if (error) return <div>{error}</div>;
-  if (!currentTrack || !videoId) return <div>재생할 곡이 없습니다.</div>;
+  const defaultBgGraident = "linear-gradient(180deg, #1e1e1e 0%, #1e1e1e 100%)";
+
+  if (loading)
+    return (
+      <div
+        className="w-screen h-screen flex items-center justify-center text-white"
+        style={{ background: defaultBgGraident }}
+      >
+        불러오는 중...
+      </div>
+    );
+  if (error)
+    return (
+      <div
+        className="w-screen h-screen flex items-center justify-center text-white"
+        style={{ background: defaultBgGraident }}
+      >
+        {error}
+      </div>
+    );
+  if (!currentTrack || !videoId)
+    return (
+      <div
+        className="w-screen h-screen flex items-center justify-center text-white"
+        style={{ background: defaultBgGraident }}
+      >
+        재생할 곡이 없습니다.
+      </div>
+    );
 
   const handleTogglePlay = () => {
     setUserInteracted(true);
@@ -713,7 +739,7 @@ function MusicPlayerContent() {
   const palette = currentTrack.appleMusicMeta?.palette;
   const bgGradient = palette
     ? `linear-gradient(180deg, ${palette.muted} 0%, ${palette.vibrant} 100%)`
-    : "linear-gradient(180deg, #1e1e1e 0%, #1e1e1e 100%)";
+    : defaultBgGraident;
   const rangeColor = palette?.darkVibrant ?? "#2563eb";
   const artworkUrl = currentTrack.appleMusicMeta?.artworkUrl1000 ?? currentTrack.appleMusicMeta?.artworkUrl100;
 
