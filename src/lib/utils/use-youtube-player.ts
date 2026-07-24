@@ -2,10 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// 유튜브 IFrame Player API는 전역 스크립트를 한 번만 로드해야 하고, 그 로드가 끝났다는 걸
-// window.onYouTubeIframeAPIReady 콜백으로 알려주는 방식이라, 페이지에 여러 플레이어가 있어도
-// 스크립트 자체는 딱 한 번만 불러오도록 모듈 스코프에서 Promise를 캐싱합니다.
-
 interface YTPlayerInstance {
   playVideo(): void;
   pauseVideo(): void;
@@ -18,11 +14,12 @@ interface YTPlayerInstance {
   unMute(): void;
   isMuted(): boolean;
   destroy(): void;
+  loadVideoById(videoId: string): void;
 }
 
 interface YTNamespace {
   Player: new (element: HTMLElement, options: Record<string, unknown>) => YTPlayerInstance;
-  PlayerState: { ENDED: number; PLAYING: number; PAUSED: number };
+  PlayerState: { ENDED: number; PLAYING: number; PAUSED: number; BUFFERING: number };
 }
 
 declare global {
@@ -56,42 +53,37 @@ function loadYouTubeApi(): Promise<void> {
 interface UseYouTubePlayerOptions {
   videoId: string;
   onEnded?: () => void;
-  /** true면 플레이어가 준비되는 즉시 재생을 시도합니다. 브라우저 자동재생 정책상
-      사용자 상호작용이 한 번도 없었던 세션에서는 무음이 아니면 막힐 수 있습니다. */
   autoplay?: boolean;
 }
 
-// 이 훅 하나가 "실제 재생 상태의 유일한 출처"가 되도록 설계했습니다.
-// MusicPlayer(하단 바)와 NowPlayingOverlay(전체화면)처럼 같은 곡을 다르게 보여주는
-// UI가 여러 개 있어도, 이 훅은 페이지에서 딱 한 번만 호출하고 상태/컨트롤 함수를
-// 두 컴포넌트에 똑같이 내려주면 됩니다 (MusicPlayer/NowPlayingOverlay는 그래서 controlled
-// 컴포넌트로 만들어져 있음 — 자체적으로 재생 상태를 갖지 않고 props로만 받음).
-
 export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouTubePlayerOptions) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    setContainerEl(node);
+  }, []);
+
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(80);
   const [muted, setMuted] = useState(false);
 
   useEffect(() => {
+    if (!containerEl) return;
+
     let cancelled = false;
     let pollId: ReturnType<typeof setInterval> | undefined;
 
-    setReady(false);
-    setPlaying(false);
-    setCurrentTime(0);
-
     loadYouTubeApi().then(() => {
-      if (cancelled || !containerRef.current || !window.YT) return;
+      if (cancelled || !window.YT) return;
 
-      playerRef.current = new window.YT.Player(containerRef.current, {
+      playerRef.current = new window.YT.Player(containerEl, {
         videoId,
         width: "100%",
         height: "100%",
@@ -100,17 +92,12 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
           modestbranding: 1,
           playsinline: 1,
           controls: 0,
-          autoplay: autoplay ? 1 : 0,
         },
         events: {
           onReady: (e: { target: YTPlayerInstance }) => {
             setReady(true);
             setDuration(e.target.getDuration());
             setVolumeState(e.target.getVolume());
-
-            if (autoplay) {
-              e.target.playVideo();
-            }
 
             pollId = setInterval(() => {
               const player = playerRef.current;
@@ -121,8 +108,10 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
             }, 500);
           },
           onStateChange: (e: { data: number }) => {
-            setPlaying(e.data === window.YT!.PlayerState.PLAYING);
-            if (e.data === window.YT!.PlayerState.ENDED) onEndedRef.current?.();
+            const YTState = window.YT!.PlayerState;
+            setPlaying(e.data === YTState.PLAYING);
+            setBuffering(e.data === 3); // YT.PlayerState.BUFFERING === 3
+            if (e.data === YTState.ENDED) onEndedRef.current?.();
           },
         },
       });
@@ -133,9 +122,33 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
       if (pollId) clearInterval(pollId);
       playerRef.current?.destroy();
       playerRef.current = null;
+      setReady(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- videoId/autoplay가 바뀔 때만 플레이어를 새로 만들어야 함
-  }, [videoId, autoplay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerEl]);
+
+  const previousVideoIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+
+    if (previousVideoIdRef.current === null) {
+      previousVideoIdRef.current = videoId;
+      return;
+    }
+
+    if (previousVideoIdRef.current === videoId) return;
+    previousVideoIdRef.current = videoId;
+
+    const player = playerRef.current;
+    if (!player || !videoId) return;
+
+    setCurrentTime(0);
+    player.loadVideoById(videoId);
+
+    if (autoplay) {
+      player.playVideo();
+    }
+  }, [videoId, autoplay, ready]);
 
   const play = useCallback(() => playerRef.current?.playVideo(), []);
   const pause = useCallback(() => playerRef.current?.pauseVideo(), []);
@@ -172,11 +185,10 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
   }, [muted]);
 
   return {
-    /** 이 ref를 실제 iframe이 들어갈 자리에 붙이세요. 음악처럼 소리만 필요하면
-        시각적으로 숨긴 1px 컨테이너에, 영상처럼 화면이 보여야 하면 실제 영역에 붙이면 됩니다. */
     containerRef,
     ready,
     playing,
+    buffering,
     currentTime,
     duration,
     volume,

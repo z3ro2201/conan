@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
+import Link from "next/link";
 
 type SyncedLine = { time: number; text: string };
 
@@ -299,6 +300,34 @@ function MusicPlayerContent() {
       className="relative min-w-screen min-h-screen transition-[background] duration-500 overflow-hidden"
       style={{ background: bgGradient, color: "#fff" }}
     >
+      <div className="fixed right-5 top-5 z-100">
+        {Object.keys(titleMap).length > 0 && (
+          <Link
+            href={`/music/synced-lyrics/${currentIndex + 1}`}
+            className="px-3 py-1 rounded-full text-sm"
+            style={{
+              background: lyricsLang === "synced" ? "rgba(255,255,255,0.2)" : "transparent",
+              color: lyricsLang === "synced" ? "#fff" : "rgba(255,255,255,0.5)",
+            }}
+            target="_blank"
+          >
+            실시간 가사 {hasSyncedLyrics ? "편집" : "등록"}
+          </Link>
+        )}
+        {Object.keys(titleMap).length == 0 && (
+          <Link
+            href={`/music/update/${currentIndex + 1}`}
+            className="px-3 py-1 rounded-full text-sm"
+            style={{
+              background: lyricsLang === "synced" ? "rgba(255,255,255,0.2)" : "transparent",
+              color: lyricsLang === "synced" ? "#fff" : "rgba(255,255,255,0.5)",
+            }}
+            target="_blank"
+          >
+            가사정보 등록
+          </Link>
+        )}
+      </div>
       <div
         ref={containerRef}
         style={{
