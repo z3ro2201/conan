@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
@@ -145,7 +145,7 @@ function SyncedLyricsView({ syncedLyrics, currentTime }: SyncedLyricsViewProps) 
   );
 }
 
-const MusicPlayerPage = () => {
+function MusicPlayerContent() {
   const searchParams = useSearchParams();
 
   const [tracks, setTracks] = useState<TrackWithRelations[]>([]);
@@ -202,7 +202,7 @@ const MusicPlayerPage = () => {
   const goNext = useCallback(() => {
     setCurrentIndex((i) => {
       if (i + 1 < tracks.length) {
-        if (userInteracted) setShouldAutoplay(true); // 사용자가 한 번 재생한 적 있어야 다음곡 자동재생 허용
+        if (userInteracted) setShouldAutoplay(true);
         return i + 1;
       }
       return i;
@@ -212,7 +212,7 @@ const MusicPlayerPage = () => {
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => {
       if (i > 0) {
-        if (userInteracted) setShouldAutoplay(true); // 이전곡도 동일하게 처리
+        if (userInteracted) setShouldAutoplay(true);
         return i - 1;
       }
       return i;
@@ -242,7 +242,7 @@ const MusicPlayerPage = () => {
   if (!currentTrack || !videoId) return <div>재생할 곡이 없습니다.</div>;
 
   const handleTogglePlay = () => {
-    setUserInteracted(true); // 최초 재생 버튼 클릭 시점부터 "사용자 상호작용 있었음"으로 기록
+    setUserInteracted(true);
     setShouldAutoplay(true);
     togglePlay();
   };
@@ -447,6 +447,20 @@ const MusicPlayerPage = () => {
         </div>
       </div>
     </div>
+  );
+}
+
+const MusicPlayerPage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "#1e1e1e", color: "#fff" }}>
+          불러오는 중...
+        </div>
+      }
+    >
+      <MusicPlayerContent />
+    </Suspense>
   );
 };
 

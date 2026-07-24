@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { YouTubeVideoPlayer } from "@/components/ui/youtube-video-player";
 import { Tabs } from "@/components/ui/tabs";
@@ -61,10 +61,7 @@ const LYRICS_LABELS: Record<string, string> = {
   en: "영어",
 };
 
-const hangulLyrics = () => {};
-const japaneseLyrics = () => {};
-
-const VideoPlayerPage = () => {
+function VideoPlayerContent() {
   const searchParams = useSearchParams();
   const playIdParam = (searchParams.get("playId") ?? "").trim();
 
@@ -117,12 +114,7 @@ const VideoPlayerPage = () => {
       <h1>{currentTrack.titles.find((t) => t.language === "ko")?.title ?? currentTrack.artist}</h1>
       <p>{currentTrack.artist}</p>
 
-      {/* key로 videoId를 넘겨서 곡이 바뀔 때 컴포넌트가 완전히 새로 마운트되도록 함 */}
       <YouTubeVideoPlayer key={videoId} videoId={videoId} className="w-full aspect-video" />
-
-      <div>
-        <div></div>
-      </div>
 
       {currentTrack?.lyrics && currentTrack.lyrics.length > 0 && (
         <div className="">
@@ -150,6 +142,14 @@ const VideoPlayerPage = () => {
         </div>
       )}
     </div>
+  );
+}
+
+const VideoPlayerPage = () => {
+  return (
+    <Suspense fallback={<div>불러오는 중...</div>}>
+      <VideoPlayerContent />
+    </Suspense>
   );
 };
 
