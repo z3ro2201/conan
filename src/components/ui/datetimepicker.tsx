@@ -4,7 +4,7 @@ import cn from "@/lib/utils/cn";
 import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "./icon";
 import { Button } from "./button";
-import { getMonthMatrix, isSameDay, WEEKDAYS } from "./datepicker";
+import { getMonthMatrix, isSameDay, WEEKDAYS } from "./date-picker";
 
 function formatDateTimeLabel(date: Date) {
   const h = String(date.getHours()).padStart(2, "0");
