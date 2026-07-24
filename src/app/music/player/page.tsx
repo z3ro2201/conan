@@ -200,6 +200,8 @@ function PlaylistTabView({ tracks, currentIndex, onSelectTrack }: PlaylistTabVie
 interface MiniPlayerViewProps {
   currentTrack: TrackWithRelations;
   artworkUrl: string | undefined;
+  showVideo: boolean;
+  onToggleVideo: () => void;
   albumSlotRef: React.RefObject<HTMLDivElement | null>;
   titleMap: { ko: string | null; ja: string | null };
   progressValue: number;
@@ -221,6 +223,8 @@ interface MiniPlayerViewProps {
 function MiniPlayerView({
   currentTrack,
   artworkUrl,
+  showVideo,
+  onToggleVideo,
   albumSlotRef,
   titleMap,
   progressValue,
@@ -243,15 +247,34 @@ function MiniPlayerView({
 
   return (
     <div className="flex flex-col h-full px-6 pt-14 pb-6">
-      <button onClick={onExpand} className="flex-1 flex items-center justify-center min-h-0 cursor-pointer">
-        {/* 앨범아트가 있으면 이미지, 없으면 이 자리를 빈 슬롯으로 두고 좌표만 측정 */}
+      {/* 앨범아트 — 클릭하면 재생/일시정지 */}
+      <button
+        onClick={handleTogglePlay}
+        disabled={!ready}
+        className="flex-1 flex items-center justify-center min-h-0 cursor-pointer relative group"
+      >
         <div ref={albumSlotRef} className="max-w-full max-h-full aspect-square" style={{ width: "min(60vw, 320px)" }}>
-          {artworkUrl && <img src={artworkUrl} className="w-full h-full object-cover rounded-2xl shadow-2xl" />}
+          {artworkUrl && !showVideo && (
+            <img src={artworkUrl} className="w-full h-full object-cover rounded-2xl shadow-2xl" />
+          )}
         </div>
+
+        {artworkUrl && !showVideo && (
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-active:opacity-100 transition-opacity bg-black/20 rounded-2xl pointer-events-none">
+            {!ready || buffering ? (
+              <div className="spinner w-10 h-10 rounded-full border-4 border-white/20 border-t-white" />
+            ) : playing ? (
+              <Icon name="pause" size={48} />
+            ) : (
+              <Icon name="play" size={48} />
+            )}
+          </div>
+        )}
       </button>
 
       <div className="flex-shrink-0 pt-4">
         <div className="flex items-center justify-between mb-2">
+          {/* 확장 전환은 이제 제목 클릭 */}
           <button onClick={onExpand} className="text-left cursor-pointer">
             <h1 className="m-0 p-0 text-xl font-bold">{title}</h1>
             <p className="m-0 p-0 text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -259,7 +282,15 @@ function MiniPlayerView({
             </p>
           </button>
           <div className="flex gap-2 justify-end">
-            <button onClick={onShowPlaylist} className="cursor-pointer flex-shrink-0 ml-2">
+            {artworkUrl && (
+              <button onClick={onToggleVideo} className="cursor-pointer flex-shrink-0">
+                <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
+              </button>
+            )}
+            <button onClick={onExpand} className="cursor-pointer flex-shrink-0">
+              <Icon name="chevron-double-up" size={22} />
+            </button>
+            <button onClick={onShowPlaylist} className="cursor-pointer flex-shrink-0">
               <Icon name="list" size={22} />
             </button>
             <button onClick={onShowPlaylist} className="cursor-pointer flex-shrink-0">
@@ -313,6 +344,9 @@ function MiniPlayerView({
 interface ExpandedMobileViewProps {
   currentTrack: TrackWithRelations;
   artworkUrl: string | undefined;
+  showVideo: boolean;
+  onToggleVideo: () => void;
+  albumSlotRef: React.RefObject<HTMLDivElement | null>;
   titleMap: { ko: string | null; ja: string | null };
   lyricsLang: string;
   setLyricsLang: (lang: string) => void;
@@ -345,6 +379,9 @@ interface ExpandedMobileViewProps {
 function ExpandedMobileView({
   currentTrack,
   artworkUrl,
+  showVideo,
+  onToggleVideo,
+  albumSlotRef,
   titleMap,
   lyricsLang,
   setLyricsLang,
@@ -386,8 +423,10 @@ function ExpandedMobileView({
 
       <div className="w-full flex items-center justify-between flex-shrink-0 pt-2 pb-2 px-6">
         <div className="flex items-center">
-          <div className="mr-3">
-            {artworkUrl && <img src={artworkUrl} className="w-24 h-24 shadow-2xl object-cover rounded-md" />}
+          <div ref={albumSlotRef} className="mr-3 w-24 h-24">
+            {artworkUrl && !showVideo && (
+              <img src={artworkUrl} className="w-full h-full shadow-2xl object-cover rounded-md" />
+            )}
           </div>
           <div>
             <h1 className="m-0 p-0 text-xl font-bold">
@@ -401,6 +440,11 @@ function ExpandedMobileView({
           </div>
         </div>
         <div className="flex gap-2 items-center justify-end">
+          {artworkUrl && (
+            <button onClick={onToggleVideo} className="cursor-pointer flex-shrink-0">
+              <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
+            </button>
+          )}
           <button onClick={togglePlaylist} className="cursor-pointer flex-shrink-0">
             <Icon name="list" size={22} style={{ opacity: isPlaylistOpen ? 1 : 0.7 }} />
           </button>
@@ -569,10 +613,11 @@ function MusicPlayerContent() {
   const [shouldAutoplay, setShouldAutoplay] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [videoOverride, setVideoOverride] = useState(false);
 
-  // 앨범아트 자리(빈 슬롯)의 좌표를 측정해서 유튜브 플레이어를 그 위치에 배치
   const desktopAlbumSlotRef = useRef<HTMLDivElement>(null);
   const miniAlbumSlotRef = useRef<HTMLDivElement>(null);
+  const expandedAlbumSlotRef = useRef<HTMLDivElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
@@ -642,39 +687,65 @@ function MusicPlayerContent() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  useEffect(() => {
+    setVideoOverride(false);
+  }, [currentIndex]);
+
   const currentTrack = tracks[currentIndex];
   const videoId = currentTrack ? extractVideoId(currentTrack.youtubeUrl) : "";
   const artworkUrl = currentTrack?.appleMusicMeta?.artworkUrl1000 ?? currentTrack?.appleMusicMeta?.artworkUrl100;
+  const showVideo = !artworkUrl || videoOverride;
 
-  // artworkUrl이 없을 때만, 실제로 화면에 보이는(md 이상이면 데스크톱, 아니면 모바일 미니뷰) 슬롯의 좌표를 측정
   useEffect(() => {
-    if (artworkUrl) {
+    if (!showVideo) {
       setVideoRect(null);
       return;
     }
 
     const measure = () => {
       const isDesktop = window.matchMedia("(min-width: 768px)").matches;
-      const slotEl = isDesktop ? desktopAlbumSlotRef.current : miniAlbumSlotRef.current;
+
+      let slotEl: HTMLDivElement | null;
+      if (isDesktop) {
+        slotEl = desktopAlbumSlotRef.current;
+      } else if (isExpanded) {
+        slotEl = expandedAlbumSlotRef.current;
+      } else {
+        slotEl = miniAlbumSlotRef.current;
+      }
+
       if (!slotEl) return;
 
       const rect = slotEl.getBoundingClientRect();
-      setVideoRect({
+      const rounded = {
         top: Math.round(rect.top),
         left: Math.round(rect.left),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+      };
+
+      setVideoRect((prev) => {
+        if (
+          prev &&
+          prev.top === rounded.top &&
+          prev.left === rounded.left &&
+          prev.width === rounded.width &&
+          prev.height === rounded.height
+        ) {
+          return prev;
+        }
+        return rounded;
       });
     };
 
-    const timeout = setTimeout(measure, 50); // DOM 페인트 이후 1회 측정
+    const timeout = setTimeout(measure, 50);
     window.addEventListener("resize", measure);
 
     return () => {
       clearTimeout(timeout);
       window.removeEventListener("resize", measure);
     };
-  }, [artworkUrl, isExpanded, loading]); // isExpanded가 바뀔 때(확장/축소)만 재측정
+  }, [showVideo, isExpanded, loading]);
 
   const goNext = useCallback(() => {
     setCurrentIndex((i) => {
@@ -759,8 +830,7 @@ function MusicPlayerContent() {
   const hasSyncedLyrics = currentTrack.syncedLyrics.length > 0;
   const isPlaylistOpenDesktop = lyricsLang === "playlist";
 
-  // artworkUrl 없을 때: 측정된 슬롯 좌표에 정확히 맞춰 배치. 아직 측정 전이면 화면 밖에 숨겨둠(깜빡임 방지)
-  const playerContainerStyle: React.CSSProperties = artworkUrl
+  const playerContainerStyle: React.CSSProperties = !showVideo
     ? {
         position: "fixed",
         width: "1px",
@@ -778,10 +848,7 @@ function MusicPlayerContent() {
           height: videoRect.height,
           borderRadius: "16px",
           overflow: "hidden",
-          zIndex: 50, // 더 높은 값으로 임시 테스트
-          opacity: 1, // 명시적으로 추가
-          pointerEvents: "auto", // 명시적으로 추가
-          background: "yellow", // 임시: 이 배경색이 보이면 div 위치는 맞는데 iframe이 안 그려지는 것
+          zIndex: 5,
         }
       : {
           position: "fixed",
@@ -828,7 +895,6 @@ function MusicPlayerContent() {
         )}
       </div>
 
-      {/* 컨테이너 하나만 유지 — 측정된 좌표에 맞춰 fixed로 이동 */}
       <div ref={containerRef} style={playerContainerStyle} />
 
       <div
@@ -853,11 +919,27 @@ function MusicPlayerContent() {
       <div className="relative z-10 hidden md:flex h-full items-center justify-center">
         <div className="w-full max-w-6xl flex flex-row mx-auto">
           <div className="w-1/2 lg:w-[45%] lg:max-w-[480px] flex flex-col justify-center items-start pl-16 pr-8 gap-6">
-            {/* 앨범아트 슬롯 — artworkUrl 있으면 이미지, 없으면 빈 자리(측정용) */}
             <div className="w-full flex items-center justify-center">
-              <div ref={desktopAlbumSlotRef} className="w-64 h-64">
-                {artworkUrl && <img src={artworkUrl} className="w-full h-full shadow-2xl object-cover rounded-md" />}
-              </div>
+              {/* 앨범아트 — 클릭하면 재생/일시정지 */}
+              <button onClick={handleTogglePlay} disabled={!ready} className="w-64 h-64 cursor-pointer relative group">
+                <div ref={desktopAlbumSlotRef} className="w-full h-full">
+                  {artworkUrl && !showVideo && (
+                    <img src={artworkUrl} className="w-full h-full shadow-2xl object-cover rounded-md" />
+                  )}
+                </div>
+
+                {artworkUrl && !showVideo && (
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-md pointer-events-none">
+                    {!ready || buffering ? (
+                      <div className="spinner w-10 h-10 rounded-full border-4 border-white/20 border-t-white" />
+                    ) : playing ? (
+                      <Icon name="pause" size={48} />
+                    ) : (
+                      <Icon name="play" size={48} />
+                    )}
+                  </div>
+                )}
+              </button>
             </div>
 
             <div className="w-full flex items-center justify-between">
@@ -871,22 +953,29 @@ function MusicPlayerContent() {
                   {currentTrack.artist}
                 </p>
               </div>
-              {tracks.length > 1 && (
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
-                    className="cursor-pointer flex-shrink-0"
-                  >
-                    <Icon name="list" size={22} style={{ opacity: isPlaylistOpenDesktop ? 1 : 0.7 }} />
+              <div className="flex justify-end gap-2">
+                {artworkUrl && (
+                  <button onClick={() => setVideoOverride((prev) => !prev)} className="cursor-pointer flex-shrink-0">
+                    <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
                   </button>
-                  <button
-                    onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
-                    className="cursor-pointer flex-shrink-0"
-                  >
-                    <Icon name="lyrics" size={22} />
-                  </button>
-                </div>
-              )}
+                )}
+                {tracks.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
+                      className="cursor-pointer flex-shrink-0"
+                    >
+                      <Icon name="list" size={22} style={{ opacity: isPlaylistOpenDesktop ? 1 : 0.7 }} />
+                    </button>
+                    <button
+                      onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
+                      className="cursor-pointer flex-shrink-0"
+                    >
+                      <Icon name="lyrics" size={22} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="w-full">
@@ -1039,6 +1128,9 @@ function MusicPlayerContent() {
           <ExpandedMobileView
             currentTrack={currentTrack}
             artworkUrl={artworkUrl}
+            showVideo={showVideo}
+            onToggleVideo={() => setVideoOverride((prev) => !prev)}
+            albumSlotRef={expandedAlbumSlotRef}
             titleMap={titleMap}
             lyricsLang={lyricsLang}
             setLyricsLang={setLyricsLang}
@@ -1071,6 +1163,8 @@ function MusicPlayerContent() {
           <MiniPlayerView
             currentTrack={currentTrack}
             artworkUrl={artworkUrl}
+            showVideo={showVideo}
+            onToggleVideo={() => setVideoOverride((prev) => !prev)}
             albumSlotRef={miniAlbumSlotRef}
             titleMap={titleMap}
             progressValue={progressValue}
