@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "코난위키",
+  title: "",
   description: "UI킷 예시 페이지",
 };
 
