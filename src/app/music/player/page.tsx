@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
@@ -200,6 +200,7 @@ function PlaylistTabView({ tracks, currentIndex, onSelectTrack }: PlaylistTabVie
 interface MiniPlayerViewProps {
   currentTrack: TrackWithRelations;
   artworkUrl: string | undefined;
+  albumSlotRef: React.RefObject<HTMLDivElement | null>;
   titleMap: { ko: string | null; ja: string | null };
   progressValue: number;
   progressPercent: number;
@@ -220,6 +221,7 @@ interface MiniPlayerViewProps {
 function MiniPlayerView({
   currentTrack,
   artworkUrl,
+  albumSlotRef,
   titleMap,
   progressValue,
   progressPercent,
@@ -242,9 +244,10 @@ function MiniPlayerView({
   return (
     <div className="flex flex-col h-full px-6 pt-14 pb-6">
       <button onClick={onExpand} className="flex-1 flex items-center justify-center min-h-0 cursor-pointer">
-        {artworkUrl && (
-          <img src={artworkUrl} className="max-w-full max-h-full aspect-square object-cover rounded-2xl shadow-2xl" />
-        )}
+        {/* 앨범아트가 있으면 이미지, 없으면 이 자리를 빈 슬롯으로 두고 좌표만 측정 */}
+        <div ref={albumSlotRef} className="max-w-full max-h-full aspect-square" style={{ width: "min(60vw, 320px)" }}>
+          {artworkUrl && <img src={artworkUrl} className="w-full h-full object-cover rounded-2xl shadow-2xl" />}
+        </div>
       </button>
 
       <div className="flex-shrink-0 pt-4">
@@ -567,6 +570,11 @@ function MusicPlayerContent() {
   const [userInteracted, setUserInteracted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // 앨범아트 자리(빈 슬롯)의 좌표를 측정해서 유튜브 플레이어를 그 위치에 배치
+  const desktopAlbumSlotRef = useRef<HTMLDivElement>(null);
+  const miniAlbumSlotRef = useRef<HTMLDivElement>(null);
+  const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+
   useEffect(() => {
     const playIdParamRaw = (searchParams.get("playId") ?? "").trim();
 
@@ -636,6 +644,37 @@ function MusicPlayerContent() {
 
   const currentTrack = tracks[currentIndex];
   const videoId = currentTrack ? extractVideoId(currentTrack.youtubeUrl) : "";
+  const artworkUrl = currentTrack?.appleMusicMeta?.artworkUrl1000 ?? currentTrack?.appleMusicMeta?.artworkUrl100;
+
+  // artworkUrl이 없을 때만, 실제로 화면에 보이는(md 이상이면 데스크톱, 아니면 모바일 미니뷰) 슬롯의 좌표를 측정
+  useEffect(() => {
+    if (artworkUrl) {
+      setVideoRect(null);
+      return;
+    }
+
+    const measure = () => {
+      const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+      const slotEl = isDesktop ? desktopAlbumSlotRef.current : miniAlbumSlotRef.current;
+      if (!slotEl) return;
+
+      const rect = slotEl.getBoundingClientRect();
+      setVideoRect({
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+    };
+
+    const timeout = setTimeout(measure, 50); // DOM 페인트 이후 1회 측정
+    window.addEventListener("resize", measure);
+
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("resize", measure);
+    };
+  }, [artworkUrl, isExpanded, loading]); // isExpanded가 바뀔 때(확장/축소)만 재측정
 
   const goNext = useCallback(() => {
     setCurrentIndex((i) => {
@@ -690,35 +729,9 @@ function MusicPlayerContent() {
     autoplay: shouldAutoplay,
   });
 
-  const defaultBgGraident = "linear-gradient(180deg, #1e1e1e 0%, #1e1e1e 100%)";
-
-  if (loading)
-    return (
-      <div
-        className="w-screen h-screen flex items-center justify-center text-white"
-        style={{ background: defaultBgGraident }}
-      >
-        불러오는 중...
-      </div>
-    );
-  if (error)
-    return (
-      <div
-        className="w-screen h-screen flex items-center justify-center text-white"
-        style={{ background: defaultBgGraident }}
-      >
-        {error}
-      </div>
-    );
-  if (!currentTrack || !videoId)
-    return (
-      <div
-        className="w-screen h-screen flex items-center justify-center text-white"
-        style={{ background: defaultBgGraident }}
-      >
-        재생할 곡이 없습니다.
-      </div>
-    );
+  if (loading) return <div>불러오는 중...</div>;
+  if (error) return <div>{error}</div>;
+  if (!currentTrack || !videoId) return <div>재생할 곡이 없습니다.</div>;
 
   const handleTogglePlay = () => {
     setUserInteracted(true);
@@ -739,13 +752,47 @@ function MusicPlayerContent() {
   const palette = currentTrack.appleMusicMeta?.palette;
   const bgGradient = palette
     ? `linear-gradient(180deg, ${palette.muted} 0%, ${palette.vibrant} 100%)`
-    : defaultBgGraident;
+    : "linear-gradient(180deg, #1e1e1e 0%, #1e1e1e 100%)";
   const rangeColor = palette?.darkVibrant ?? "#2563eb";
-  const artworkUrl = currentTrack.appleMusicMeta?.artworkUrl1000 ?? currentTrack.appleMusicMeta?.artworkUrl100;
 
   const currentLyrics = currentTrack.lyrics.find((l) => l.language === lyricsLang) ?? currentTrack.lyrics[0];
   const hasSyncedLyrics = currentTrack.syncedLyrics.length > 0;
   const isPlaylistOpenDesktop = lyricsLang === "playlist";
+
+  // artworkUrl 없을 때: 측정된 슬롯 좌표에 정확히 맞춰 배치. 아직 측정 전이면 화면 밖에 숨겨둠(깜빡임 방지)
+  const playerContainerStyle: React.CSSProperties = artworkUrl
+    ? {
+        position: "fixed",
+        width: "1px",
+        height: "1px",
+        overflow: "hidden",
+        opacity: 0,
+        pointerEvents: "none",
+      }
+    : videoRect
+      ? {
+          position: "fixed",
+          top: videoRect.top,
+          left: videoRect.left,
+          width: videoRect.width,
+          height: videoRect.height,
+          borderRadius: "16px",
+          overflow: "hidden",
+          zIndex: 50, // 더 높은 값으로 임시 테스트
+          opacity: 1, // 명시적으로 추가
+          pointerEvents: "auto", // 명시적으로 추가
+          background: "yellow", // 임시: 이 배경색이 보이면 div 위치는 맞는데 iframe이 안 그려지는 것
+        }
+      : {
+          position: "fixed",
+          top: "-9999px",
+          left: "-9999px",
+          width: "1px",
+          height: "1px",
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none",
+        };
 
   return (
     <div
@@ -781,17 +828,8 @@ function MusicPlayerContent() {
         )}
       </div>
 
-      <div
-        ref={containerRef}
-        style={{
-          position: "absolute",
-          width: "1px",
-          height: "1px",
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
+      {/* 컨테이너 하나만 유지 — 측정된 좌표에 맞춰 fixed로 이동 */}
+      <div ref={containerRef} style={playerContainerStyle} />
 
       <div
         style={{
@@ -815,11 +853,12 @@ function MusicPlayerContent() {
       <div className="relative z-10 hidden md:flex h-full items-center justify-center">
         <div className="w-full max-w-6xl flex flex-row mx-auto">
           <div className="w-1/2 lg:w-[45%] lg:max-w-[480px] flex flex-col justify-center items-start pl-16 pr-8 gap-6">
-            {artworkUrl && (
-              <div className="w-full flex items-center justify-center">
-                <img src={artworkUrl} className="w-64 h-64 shadow-2xl object-cover rounded-md" />
+            {/* 앨범아트 슬롯 — artworkUrl 있으면 이미지, 없으면 빈 자리(측정용) */}
+            <div className="w-full flex items-center justify-center">
+              <div ref={desktopAlbumSlotRef} className="w-64 h-64">
+                {artworkUrl && <img src={artworkUrl} className="w-full h-full shadow-2xl object-cover rounded-md" />}
               </div>
-            )}
+            </div>
 
             <div className="w-full flex items-center justify-between">
               <div>
@@ -881,48 +920,47 @@ function MusicPlayerContent() {
               </div>
             </div>
 
-            <div className="w-full flex items-center gap-2 justify-between">
-              <div className="flex items-center gap-6">
-                <button onClick={goPrev} disabled={currentIndex === 0} className="cursor-pointer">
-                  <Icon name="chevron-double-left" size={40} />
-                </button>
+            <div className="flex items-center gap-6">
+              <button onClick={goPrev} disabled={currentIndex === 0} className="cursor-pointer">
+                <Icon name="chevron-double-left" size={40} />
+              </button>
 
-                <button
-                  onClick={handleTogglePlay}
-                  disabled={!ready}
-                  className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
-                >
-                  {!ready || buffering ? (
-                    <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
-                  ) : playing ? (
-                    <Icon name="pause" size={45} />
-                  ) : (
-                    <Icon name="play" size={45} />
-                  )}
-                </button>
+              <button
+                onClick={handleTogglePlay}
+                disabled={!ready}
+                className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
+              >
+                {!ready || buffering ? (
+                  <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
+                ) : playing ? (
+                  <Icon name="pause" size={45} />
+                ) : (
+                  <Icon name="play" size={45} />
+                )}
+              </button>
 
-                <button className="cursor-pointer" onClick={goNext} disabled={currentIndex >= tracks.length - 1}>
-                  <Icon name="chevron-double-right" size={40} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 w-40">
-                <button className="cursor-pointer" onClick={toggleMute}>
-                  {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volumePercent}
-                  onChange={(e) => setVolume(Number(e.target.value))}
-                  className="progress-range flex-1"
-                  style={{
-                    background: `linear-gradient(to right, ${rangeColor} ${volumePercent}%, rgba(255,255,255,0.2) ${volumePercent}%)`,
-                  }}
-                />
-              </div>
+              <button className="cursor-pointer" onClick={goNext} disabled={currentIndex >= tracks.length - 1}>
+                <Icon name="chevron-double-right" size={40} />
+              </button>
             </div>
+
+            <div className="flex items-center gap-2 w-40">
+              <button className="cursor-pointer" onClick={toggleMute}>
+                {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={volumePercent}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="progress-range flex-1"
+                style={{
+                  background: `linear-gradient(to right, ${rangeColor} ${volumePercent}%, rgba(255,255,255,0.2) ${volumePercent}%)`,
+                }}
+              />
+            </div>
+
             {tracks.length > 1 && (
               <div className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
                 {currentIndex + 1} / {tracks.length}곡
@@ -1033,6 +1071,7 @@ function MusicPlayerContent() {
           <MiniPlayerView
             currentTrack={currentTrack}
             artworkUrl={artworkUrl}
+            albumSlotRef={miniAlbumSlotRef}
             titleMap={titleMap}
             progressValue={progressValue}
             progressPercent={progressPercent}

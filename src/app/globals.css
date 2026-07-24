@@ -241,3 +241,35 @@ body {
 .spinner {
   animation: spin 0.8s linear infinite;
 }
+
+/* 데스크톱: 왼쪽 패널의 앨범아트 자리 (w-64 h-64 = 256px, 화면 중앙 정렬된 카드 안) */
+.youtube-video-slot {
+  position: fixed;
+  z-index: 5;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* 모바일 기본값: 화면 중앙 (기존 방식 유지, md 이상에서 덮어씀) */
+.youtube-video-slot {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(90vw, 480px);
+  height: min(50.625vw, 270px);
+}
+
+/* 데스크톱: 왼쪽 패널 앨범아트 자리로 정확히 이동
+   왼쪽 패널 구조: max-w-6xl(1152px) 컨테이너가 mx-auto로 중앙 정렬,
+   그 안에서 왼쪽 패널이 pl-16(64px) 이후 시작, 앨범아트는 w-64(256px) 정사각형 */
+@media (min-width: 768px) {
+  .youtube-video-slot {
+    top: 50%;
+    left: max(calc(50vw - 576px + 64px), 16px);
+    transform: translateY(-50%);
+    width: 256px;
+    height: 256px;
+    border-radius: 6px;
+  }
+}
