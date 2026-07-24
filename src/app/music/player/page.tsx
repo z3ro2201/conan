@@ -252,6 +252,7 @@ function MusicPlayerContent() {
     containerRef,
     ready,
     playing,
+    buffering,
     currentTime,
     duration,
     volume,
@@ -419,7 +420,7 @@ function MusicPlayerContent() {
                 disabled={!ready}
                 className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
               >
-                {!ready ? (
+                {!ready || buffering ? (
                   <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
                 ) : playing ? (
                   <Icon name="pause" size={45} />
@@ -488,7 +489,7 @@ function MusicPlayerContent() {
               </div>
             )}
 
-            {!ready ? (
+            {!ready || buffering ? (
               <LoadingDots />
             ) : lyricsLang === "synced" ? (
               <SyncedLyricsView syncedLyrics={currentTrack.syncedLyrics} currentTime={currentTime} />

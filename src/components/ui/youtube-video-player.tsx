@@ -26,7 +26,7 @@ export function YouTubeVideoPlayer({ videoId, className }: YouTubeVideoPlayerPro
       volume={player.volume}
       onToggleMute={player.toggleMute}
       onVolumeChange={player.setVolume}
-      onFullscreen={() => player.containerRef.current?.querySelector("iframe")?.requestFullscreen()}
+      onFullscreen={() => player.containerEl?.querySelector("iframe")?.requestFullscreen()}
       className={className}
     >
       <div ref={player.containerRef} className="w-full h-full" />

@@ -186,6 +186,7 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
 
   return {
     containerRef,
+    containerEl,
     ready,
     playing,
     buffering,
