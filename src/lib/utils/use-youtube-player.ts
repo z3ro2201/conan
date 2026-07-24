@@ -113,6 +113,13 @@ export function useYouTubePlayer({ videoId, onEnded, autoplay = false }: UseYouT
             setBuffering(e.data === 3); // YT.PlayerState.BUFFERING === 3
             if (e.data === YTState.ENDED) onEndedRef.current?.();
           },
+          onError: (e: { data: number }) => {
+            console.error("YouTube player error:", e.data);
+            // 100: 영상 없음/비공개, 101/150: embed 차단 → 재생 불가로 간주하고 다음 곡으로 스킵
+            if ([100, 101, 150].includes(e.data)) {
+              onEndedRef.current?.();
+            }
+          },
         },
       });
     });
