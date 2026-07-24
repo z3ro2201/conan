@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum SeriesType {
+  TV
+  MOVIE
+}
+
+enum DubType {
+  ORIGINAL
+  KR_DUB
+}
+
+enum TrackType {
+  TV_OP // TV애니 오프닝
+  TV_ED // TV애니 엔딩
+  MOVIE // 극장판 주제가
+}
+
+enum Language {
+  ko
+  ja
+  en
+}
+
+/// TV판 시즌 및 극장판 회차 정보
+model Series {
+  id            BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 구분: TV판/극장판
+  seriesType    SeriesType @map("series_type")
+  /// 몇 기 / 몇 번째 극장판인지
+  number        Int        @db.UnsignedInt
+  /// 시리즈 정식 명칭 (선택)
+  title         String?    @db.VarChar(255)
+  /// TV판 시작 화수 (극장판은 NULL)
+  startEpisode  Int?       @map("start_episode") @db.UnsignedInt
+  /// TV판 종료 화수 (극장판은 NULL)
+  endEpisode    Int?       @map("end_episode") @db.UnsignedInt
+
+  tracks        Track[]
+
+  @@unique([seriesType, number], name: "uq_series_type_number")
+  @@map("series")
+}
+
+/// 음원 기본 정보 테이블
+model Track {
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 소속 시리즈(시즌/극장판) ID
+  seriesId        BigInt    @map("series_id") @db.UnsignedBigInt
+  /// 부른 가수명
+  artist          String    @db.VarChar(255)
+  /// 작사가
+  lyricist        String?   @db.VarChar(255)
+  /// 작곡가
+  composer        String?   @db.VarChar(255)
+  /// 앨범 이미지 URL
+  albumImageUrl   String?   @map("album_image_url") @db.VarChar(500)
+  /// 유튜브 링크 (필수)
+  youtubeUrl      String    @map("youtube_url") @db.VarChar(500)
+  /// 애플뮤직 링크 (없을 수 있음)
+  appleMusicUrl   String?   @map("apple_music_url") @db.VarChar(500)
+  /// 스포티파이 링크 (없을 수 있음)
+  spotifyUrl      String?   @map("spotify_url") @db.VarChar(500)
+  /// 곡 유형: TV애니OP/TV애니ED/극장판
+  trackType       TrackType @map("track_type")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  dubType   DubType  @default(ORIGINAL) @map("dub_type")
+
+  series          Series    @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  titles          TrackTitle[]
+  lyrics          TrackLyrics[]
+  syncedLyrics    TrackSyncedLyrics[]
+  syncedMarkers   Json?   @map("synced_markers") // [{ id, label, time }]
+
+  @@map("tracks")
+}
+
+/// 곡 제목의 다국어(한/일/영) 버전 저장
+model TrackTitle {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 연결된 곡 ID
+  trackId   BigInt   @map("track_id") @db.UnsignedBigInt
+  /// 제목 언어 구분
+  language  Language
+  /// 해당 언어의 곡 제목
+  title     String   @db.VarChar(255)
+
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, language], name: "uq_track_title_lang")
+  @@map("track_titles")
+}
+
+/// 곡의 다국어 일반(비싱크) 가사 저장
+model TrackLyrics {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 연결된 곡 ID
+  trackId   BigInt   @map("track_id") @db.UnsignedBigInt
+  /// 가사 언어 구분
+  language  Language
+  /// 전체 가사 텍스트 (타임스탬프 없음)
+  content   String   @db.Text
+
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, language], name: "uq_track_lyrics_lang")
+  @@map("track_lyrics")
+}
+
+/// 곡의 다국어 싱크(타임스탬프) 가사 저장
+model TrackSyncedLyrics {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 연결된 곡 ID
+  trackId   BigInt   @map("track_id") @db.UnsignedBigInt
+  /// 싱크 가사 언어 구분
+  language  Language
+  /// 타임스탬프 포함 가사 라인 배열, 예: [{"time":12500,"text":"..."}], time 단위는 ms
+  lines     Json
+
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, language], name: "uq_track_synced_lang")
+  @@map("track_synced_lyrics")
+}

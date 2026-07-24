@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+/*
+  bg-primary       text-primary
+  bg-primary-dark
+  bg-accent-red     bg-danger-dark
+  bg-success        bg-success-bg     text-success
+  bg-warning        bg-warning-bg     text-warning
+  bg-danger         bg-danger-bg      text-danger
+  bg-info           bg-info-bg        text-info
+  bg-background     bg-surface
+  text-foreground   text-muted        text-muted-light
+  border-border
+*/
+
+:root {
+  /* NEUTRAL */
+  --background: #f7f6f2;
+  --surface: #ffffff;
+  --foreground: #22252e; /* Ink */
+  --muted: #6b7280;
+  --muted-light: #9aa1b2;
+  --border: #edeef3;
+
+  /* BRAND */
+  --primary: #1b4fa0;
+  --primary-dark: #0e3374;
+  --accent-red: #e4322f;
+  --danger-dark: #a61f1d;
+
+  /* SEMANTIC */
+  --success: #1e7a46;
+  --success-bg: #e9f7ef;
+  --warning: #8a6416;
+  --warning-bg: #fff7e6;
+  --danger: #e4322f;
+  --danger-bg: #fdecec;
+  --info: #1b4fa0;
+  --info-bg: #eaf0fc;
+}
+
+.dark {
+  --background: #0f1115;
+  --surface: #181b22;
+  --foreground: #f0f0ec;
+  --muted: #b7bcc8;
+  --muted-light: #7a8194;
+  --border: #2a2d38;
+
+  --primary: #5b8fe0;
+  --primary-dark: #1b4fa0;
+  --accent-red: #f0645f;
+  --danger-dark: #e4322f;
+
+  --success: #3fa46b;
+  --success-bg: #123322;
+  --warning: #d9a53d;
+  --warning-bg: #332a12;
+  --danger: #f0645f;
+  --danger-bg: #3a1616;
+  --info: #7fa8e8;
+  --info-bg: #16233a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-light: var(--muted-light);
+  --color-border: var(--border);
+
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-accent-red: var(--accent-red);
+  --color-danger-dark: var(--danger-dark);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Skeleton 컴포넌트가 쓰는 로딩 셰이머 애니메이션 */
+@keyframes shimmer {
+  0% {
+    background-position: 400px 0;
+  }
+  100% {
+    background-position: -400px 0;
+  }
+}
+
+/* LoadingBar 컴포넌트가 쓰는 인디케이터형 로딩바 애니메이션 */
+@keyframes loadbar {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* ScrollBox 컴포넌트가 쓰는 커스텀 스크롤바. Tailwind 유틸리티만으로는 스크롤바
+   자체(::-webkit-scrollbar)를 스타일링할 수 없어서 별도 클래스로 뺐습니다. */
+.scrollbar-thin {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.scrollbar-thick::-webkit-scrollbar {
+  width: 12px;
+}
+.scrollbar-thick::-webkit-scrollbar-thumb {
+  background: var(--muted-light);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+
+@layer utilities {
+  .progress-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 9999px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  /* 손잡이(thumb) 숨기기 — Webkit (Chrome, Safari, Edge) */
+  .progress-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 0;
+    height: 0;
+    opacity: 0;
+  }
+
+  /* 손잡이(thumb) 숨기기 — Firefox */
+  .progress-range::-moz-range-thumb {
+    width: 0;
+    height: 0;
+    opacity: 0;
+    border: none;
+  }
+
+  /* 트랙 기본 스타일 제거 (실제 채워진 색은 inline style의 linear-gradient가 담당) */
+  .progress-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 9999px;
+  }
+
+  .progress-range::-moz-range-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: transparent;
+  }
+}
+
+@keyframes lyric-wave-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lyric-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lyric-wave-in {
+  animation: lyric-fade-up 0.45s ease-out both;
+}
+/* .lyric-wave-in {
+  animation: lyric-wave-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+} */
+
+@keyframes dot-fade {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.loading-dot {
+  animation: dot-fade 1.4s infinite ease-in-out both;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+}
