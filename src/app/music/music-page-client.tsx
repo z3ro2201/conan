@@ -10,6 +10,7 @@ interface SerializedTrack {
   id: string;
   artist: string;
   youtubeUrl: string;
+  dubType: string;
   series: { id: string; title: string | null };
   titles: { language: string; title: string }[];
 }
@@ -68,6 +69,8 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
     return <div className="p-8">등록된 곡이 없습니다.</div>;
   }
 
+  console.log(tracks);
+
   return (
     <div className="min-h-screen bg-background">
       <main className="max-w-[1120px] mx-auto px-6 py-8">
@@ -105,6 +108,8 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
             {tracks.map((track) => {
               const isSelected = selectedIds.includes(track.id);
               const title = track.titles.find((t) => t.language === "ko")?.title ?? track.artist;
+              const titleKR = track.titles.find((t) => t.language === "ko")?.title ?? track.artist;
+              const titleJP = track.titles.find((t) => t.language === "jp")?.title ?? track.artist;
 
               return (
                 <li key={track.id} className="border-b border-background last:border-none">
@@ -123,7 +128,13 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
                       <span aria-hidden="true" className="w-6 text-center text-muted-light">
                         <Icon name="play" size={13} className="mx-auto" />
                       </span>
-                      <span className="flex-1 text-sm font-medium text-foreground">{title}</span>
+                      <span className="flex-1 text-sm font-medium text-foreground">
+                        <span className="block text-gray-500">{track.series.title}</span>
+                        <span className="block">
+                          {track.artist}&nbsp;-&nbsp;{track.dubType === "ORIGINAL" ? titleJP : titleKR} (
+                          {track.dubType !== "ORIGINAL" ? titleJP : titleKR})
+                        </span>
+                      </span>
                     </button>
 
                     <button
