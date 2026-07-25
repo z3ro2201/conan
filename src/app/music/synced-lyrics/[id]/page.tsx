@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { splitLyricsToLines } from "@/lib/utils/split-lyrics-lines";
-import { SyncedLyricsEditor } from "./synced-lyrics-editor-wrapper"; // 경로만 wrapper로 변경
+// import { SyncedLyricsEditor } from "./synced-lyrics-editor-wrapper";
+import { SyncedLyricsEditor } from "./synced-lyrics-editor";
+
 const LANGUAGE_ORDER = ["ja", "ko"] as const;
 
 const SyncedLyricsPage = async ({ params }: { params: Promise<{ id: string }> }) => {
@@ -28,10 +30,9 @@ const SyncedLyricsPage = async ({ params }: { params: Promise<{ id: string }> })
     notFound();
   }
 
-  // initialLinesByLanguage를 만들 때, 언어 순서를 ja 먼저로 고정
   const mapped = LANGUAGE_ORDER.map((language) => {
     const lyric = track.lyrics.find((l) => l.language === language);
-    if (!lyric) return null; // 해당 언어 가사 자체가 없으면 제외
+    if (!lyric) return null;
 
     const existingSynced = track.syncedLyrics.find((s) => s.language === language);
 
@@ -53,7 +54,7 @@ const SyncedLyricsPage = async ({ params }: { params: Promise<{ id: string }> })
   return (
     <div className="w-full flex justify-center bg-gray-200">
       <div className="p-2 w-full max-w-2xl bg-white">
-        <div className="flex px-2  min-h-[60px] flex-col justify-center">
+        <div className="flex px-2 min-h-[60px] flex-col justify-center">
           <h1>{track.dubType === "ORIGINAL" ? (titleMap.ja ?? track.artist) : (titleMap.ko ?? track.artist)}</h1>
           <p className="m-0 p-0 mt-1 text-gray-400">{track.artist}</p>
         </div>
@@ -61,6 +62,7 @@ const SyncedLyricsPage = async ({ params }: { params: Promise<{ id: string }> })
           trackId={id}
           youtubeUrl={track.youtubeUrl}
           initialLinesByLanguage={initialLinesByLanguage}
+          initialMarkers={(track.syncedMarkers as { id: string; label: string; time: number }[]) ?? []}
         />
       </div>
     </div>
