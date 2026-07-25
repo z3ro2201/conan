@@ -5,10 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
-import Link from "next/link";
 import { sanitizeRubyHtml } from "@/lib/utils/sanitize-ruby";
+import Link from "next/link";
 
-type SyncedLine = { time: number; text: string };
+type SyncedSegment = { text: string; time: number };
+type SyncedLine = { time: number; text: string; segments?: SyncedSegment[] };
+type SyncedMarker = { id: string; label: string; time: number };
 
 type TrackWithRelations = {
   id: string;
@@ -38,6 +40,7 @@ type TrackWithRelations = {
   titles: { language: string; title: string }[];
   lyrics: { language: string; content: string }[];
   syncedLyrics: { language: string; lines: SyncedLine[] }[];
+  syncedMarkers: SyncedMarker[];
 };
 
 const extractVideoId = (url: string): string => {
@@ -81,18 +84,6 @@ const formatTime = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-const getActiveTime = (lines: { time: number }[], currentTimeMs: number): number | null => {
-  let activeTime: number | null = null;
-  for (const line of lines) {
-    if (line.time <= currentTimeMs) {
-      activeTime = line.time;
-    } else {
-      break;
-    }
-  }
-  return activeTime;
-};
-
 const LANGUAGE_PRIORITY: Record<string, number> = { ja: 0, ko: 1, en: 2 };
 
 function LoadingDots() {
@@ -105,23 +96,75 @@ function LoadingDots() {
   );
 }
 
-interface SyncedLyricsViewProps {
-  syncedLyrics: { language: string; lines: SyncedLine[] }[];
-  currentTime: number;
-}
+/** ===== 실시간 가사 (segments 있으면 정밀 가라오케, 없으면 기존 방식) ===== */
+type TimelineEntry =
+  | { kind: "lyric"; time: number; text: string; language: string; segments?: SyncedSegment[] }
+  | { kind: "marker"; time: number; text: string };
 
-function SyncedLyricsView({ syncedLyrics, currentTime }: SyncedLyricsViewProps) {
-  const currentTimeMs = currentTime * 1000;
-
+function buildTimeline(
+  syncedLyrics: { language: string; lines: SyncedLine[] }[],
+  syncedMarkers: SyncedMarker[],
+): TimelineEntry[] {
   const sorted = [...syncedLyrics].sort(
     (a, b) => (LANGUAGE_PRIORITY[a.language] ?? 99) - (LANGUAGE_PRIORITY[b.language] ?? 99),
   );
   const merged = interleaveLyricsLines(sorted);
 
-  const activeTime = getActiveTime(merged, currentTimeMs);
-  const activeLines = merged.filter((line) => activeTime !== null && line.time === activeTime);
+  const timeline: TimelineEntry[] = [
+    ...merged.map((line) => ({
+      kind: "lyric" as const,
+      time: line.time,
+      text: line.text,
+      language: line.language,
+      segments: (line as SyncedLine).segments,
+    })),
+    ...syncedMarkers.map((m) => ({ kind: "marker" as const, time: m.time, text: m.label })),
+  ];
 
-  if (activeLines.length === 0) {
+  return timeline.sort((a, b) => a.time - b.time);
+}
+
+function getActiveTime(entries: { time: number }[], currentTimeMs: number): number | null {
+  let activeTime: number | null = null;
+  for (const entry of entries) {
+    if (entry.time <= currentTimeMs) {
+      activeTime = entry.time;
+    } else {
+      break;
+    }
+  }
+  return activeTime;
+}
+
+function SegmentedText({ segments, currentTimeMs }: { segments: SyncedSegment[]; currentTimeMs: number }) {
+  return (
+    <span>
+      {segments.map((seg, i) => {
+        const isPast = seg.time <= currentTimeMs;
+        return (
+          <span key={i} style={{ color: isPast ? "#fff" : "rgba(255,255,255,0.3)", transition: "color 0.15s linear" }}>
+            {seg.text}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+interface SyncedLyricsViewProps {
+  syncedLyrics: { language: string; lines: SyncedLine[] }[];
+  syncedMarkers: SyncedMarker[];
+  currentTime: number;
+}
+
+function SyncedLyricsView({ syncedLyrics, syncedMarkers, currentTime }: SyncedLyricsViewProps) {
+  const currentTimeMs = currentTime * 1000;
+
+  const timeline = buildTimeline(syncedLyrics, syncedMarkers);
+  const activeTime = getActiveTime(timeline, currentTimeMs);
+  const activeEntries = timeline.filter((e) => activeTime !== null && e.time === activeTime);
+
+  if (activeEntries.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <p style={{ color: "rgba(255,255,255,0.3)" }}>♪</p>
@@ -131,14 +174,29 @@ function SyncedLyricsView({ syncedLyrics, currentTime }: SyncedLyricsViewProps) 
 
   return (
     <div key={activeTime} className="flex flex-col items-center justify-center gap-2 h-full overflow-hidden">
-      {activeLines.map((line, i) => (
-        <div
-          key={i}
-          className="lyric-wave-in text-2xl font-bold"
-          style={{ color: "#fff", animationDelay: `${i * 0.08}s` }}
-          dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(line.text) }}
-        />
-      ))}
+      {activeEntries.map((entry, i) => {
+        if (entry.kind === "marker") {
+          return (
+            <div
+              key={i}
+              className="text-xl font-medium italic"
+              style={{ color: "rgba(255,255,255,0.4)", animationDelay: `${i * 0.08}s` }}
+            >
+              — {entry.text} —
+            </div>
+          );
+        }
+
+        return (
+          <div key={i} className="lyric-wave-in text-2xl font-bold" style={{ animationDelay: `${i * 0.08}s` }}>
+            {entry.segments && entry.segments.length > 0 ? (
+              <SegmentedText segments={entry.segments} currentTimeMs={currentTimeMs} />
+            ) : (
+              <span style={{ color: "#fff" }} dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(entry.text) }} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -148,7 +206,7 @@ function getPreferredLyricsLang(track: TrackWithRelations): string {
   return track.dubType === "ORIGINAL" ? "ja" : "ko";
 }
 
-/** ===== 재생목록 — 가사와 같은 자리에서 탭처럼 전환되는 인라인 뷰 ===== */
+/** ===== 재생목록 인라인 뷰 ===== */
 interface PlaylistTabViewProps {
   tracks: TrackWithRelations[];
   currentIndex: number;
@@ -174,7 +232,7 @@ function PlaylistTabView({ tracks, currentIndex, onSelectTrack }: PlaylistTabVie
               ) : (
                 <div className="w-11 h-11 rounded bg-white/10 flex-shrink-0" />
               )}
-              <div className="min-w-0 text-left">
+              <div className="min-w-0">
                 <p
                   className="m-0 text-sm truncate"
                   style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.85)", fontWeight: isActive ? 700 : 400 }}
@@ -196,7 +254,7 @@ function PlaylistTabView({ tracks, currentIndex, onSelectTrack }: PlaylistTabVie
   );
 }
 
-/** ===== 미니 플레이어 (평상시 기본 화면) ===== */
+/** ===== 미니 플레이어 ===== */
 interface MiniPlayerViewProps {
   currentTrack: TrackWithRelations;
   artworkUrl: string | undefined;
@@ -247,7 +305,6 @@ function MiniPlayerView({
 
   return (
     <div className="flex flex-col h-full px-6 pt-14 pb-6">
-      {/* 앨범아트 — 클릭하면 재생/일시정지 */}
       <button
         onClick={handleTogglePlay}
         disabled={!ready}
@@ -274,7 +331,6 @@ function MiniPlayerView({
 
       <div className="flex-shrink-0 pt-4">
         <div className="flex items-center justify-between mb-2">
-          {/* 확장 전환은 이제 제목 클릭 */}
           <button onClick={onExpand} className="text-left cursor-pointer">
             <h1 className="m-0 p-0 text-xl font-bold">{title}</h1>
             <p className="m-0 p-0 text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -343,7 +399,7 @@ function MiniPlayerView({
   );
 }
 
-/** ===== 확장 플레이어 (가사/재생목록 탭 전환 영역 포함) ===== */
+/** ===== 확장 플레이어 ===== */
 interface ExpandedMobileViewProps {
   currentTrack: TrackWithRelations;
   artworkUrl: string | undefined;
@@ -509,7 +565,11 @@ function ExpandedMobileView({
           ) : !ready || buffering ? (
             <LoadingDots />
           ) : lyricsLang === "synced" ? (
-            <SyncedLyricsView syncedLyrics={currentTrack.syncedLyrics} currentTime={currentTime} />
+            <SyncedLyricsView
+              syncedLyrics={currentTrack.syncedLyrics}
+              syncedMarkers={currentTrack.syncedMarkers}
+              currentTime={currentTime}
+            />
           ) : (
             currentLyrics && (
               <div className="px-2 text-center">
@@ -623,7 +683,6 @@ function MusicPlayerContent() {
   const [userInteracted, setUserInteracted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [videoOverride, setVideoOverride] = useState(false);
-  const [desktopPanelOpen, setDesktopPanelOpen] = useState(true);
 
   const desktopAlbumSlotRef = useRef<HTMLDivElement>(null);
   const miniAlbumSlotRef = useRef<HTMLDivElement>(null);
@@ -791,26 +850,6 @@ function MusicPlayerContent() {
     [userInteracted, tracks],
   );
 
-  const toggleDesktopPlaylist = () => {
-    if (desktopPanelOpen && lyricsLang === "playlist") {
-      setDesktopPanelOpen(false);
-    } else {
-      setDesktopPanelOpen(true);
-      setLyricsLang("playlist");
-    }
-  };
-
-  const toggleDesktopLyrics = () => {
-    if (desktopPanelOpen && lyricsLang !== "playlist") {
-      setDesktopPanelOpen(false);
-    } else {
-      setDesktopPanelOpen(true);
-      if (lyricsLang === "playlist") {
-        setLyricsLang(getPreferredLyricsLang(currentTrack));
-      }
-    }
-  };
-
   const {
     containerRef,
     ready,
@@ -829,6 +868,13 @@ function MusicPlayerContent() {
     onEnded: goNext,
     autoplay: shouldAutoplay,
   });
+
+  const handleTogglePlay = useCallback(() => {
+    setUserInteracted(true);
+    setShouldAutoplay(true);
+    togglePlay();
+  }, [togglePlay]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -841,24 +887,18 @@ function MusicPlayerContent() {
         e.preventDefault();
         seek(Math.min(currentTime + 5, duration || currentTime + 5));
       } else if (e.key === " " || e.code === "Space") {
-        e.preventDefault(); // 스크롤/버튼 재클릭 등 기본 동작 방지
+        e.preventDefault();
         handleTogglePlay();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentTime, duration, seek]);
+  }, [currentTime, duration, seek, handleTogglePlay]);
 
   if (loading) return <div>불러오는 중...</div>;
   if (error) return <div>{error}</div>;
   if (!currentTrack || !videoId) return <div>재생할 곡이 없습니다.</div>;
-
-  const handleTogglePlay = () => {
-    setUserInteracted(true);
-    setShouldAutoplay(true);
-    togglePlay();
-  };
 
   const progressValue = Number.isFinite(seeking ?? currentTime) ? (seeking ?? currentTime) : 0;
   const safeDuration = Number.isFinite(duration) ? duration : 0;
@@ -921,10 +961,7 @@ function MusicPlayerContent() {
           <Link
             href={`/music/synced-lyrics/${currentTrack.id}`}
             className="px-3 py-1 rounded-full text-sm"
-            style={{
-              background: "transparent",
-              color: "rgba(255,255,255,0.5)",
-            }}
+            style={{ background: "transparent", color: "rgba(255,255,255,0.5)" }}
             target="_blank"
           >
             실시간 가사 {hasSyncedLyrics ? "편집" : "등록"}
@@ -934,10 +971,7 @@ function MusicPlayerContent() {
           <Link
             href={`/music/update/${currentTrack.id}`}
             className="px-3 py-1 rounded-full text-sm"
-            style={{
-              background: "transparent",
-              color: "rgba(255,255,255,0.5)",
-            }}
+            style={{ background: "transparent", color: "rgba(255,255,255,0.5)" }}
             target="_blank"
           >
             가사정보 등록
@@ -967,24 +1001,10 @@ function MusicPlayerContent() {
 
       {/* ===== 데스크톱(md 이상) 레이아웃 ===== */}
       <div className="relative z-10 hidden md:flex h-full items-center justify-center">
-        <div
-          className={`flex flex-row mx-auto transition-all duration-300 ${
-            desktopPanelOpen ? "w-full max-w-6xl" : "w-full max-w-md justify-center"
-          }`}
-        >
-          <div
-            className={`flex flex-col justify-center gap-6 transition-all duration-300 ${
-              desktopPanelOpen ? "w-1/2 lg:w-[45%] lg:max-w-[480px] items-start pl-16 pr-8" : "w-full items-center px-8"
-            }`}
-          >
+        <div className="w-full max-w-6xl flex flex-row mx-auto">
+          <div className="w-1/2 lg:w-[45%] lg:max-w-[480px] flex flex-col justify-center items-start pl-16 pr-8 gap-6">
             <div className="w-full flex items-center justify-center">
-              <button
-                onClick={handleTogglePlay}
-                disabled={!ready}
-                className={`cursor-pointer relative group transition-all duration-300 ${
-                  desktopPanelOpen ? "w-64 h-64" : "w-80 h-80"
-                }`}
-              >
+              <button onClick={handleTogglePlay} disabled={!ready} className="w-64 h-64 cursor-pointer relative group">
                 <div ref={desktopAlbumSlotRef} className="w-full h-full">
                   {artworkUrl && !showVideo && (
                     <img src={artworkUrl} className="w-full h-full shadow-2xl object-cover rounded-md" />
@@ -1005,7 +1025,7 @@ function MusicPlayerContent() {
               </button>
             </div>
 
-            <div className={`w-full flex items-center justify-between`}>
+            <div className="w-full flex items-center justify-between">
               <div>
                 <h1 className="m-0 p-0 text-2xl font-bold">
                   {currentTrack.dubType === "ORIGINAL"
@@ -1016,27 +1036,25 @@ function MusicPlayerContent() {
                   {currentTrack.artist}
                 </p>
               </div>
-              <div className={`flex gap-2 justify-end`}>
+              <div className="flex justify-end gap-2">
                 {artworkUrl && (
                   <button onClick={() => setVideoOverride((prev) => !prev)} className="cursor-pointer flex-shrink-0">
                     <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
                   </button>
                 )}
                 {tracks.length > 1 && (
-                  <button onClick={toggleDesktopPlaylist} className="cursor-pointer flex-shrink-0">
-                    <Icon
-                      name="list"
-                      size={22}
-                      style={{ opacity: desktopPanelOpen && lyricsLang === "playlist" ? 1 : 0.7 }}
-                    />
+                  <button
+                    onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
+                    className="cursor-pointer flex-shrink-0"
+                  >
+                    <Icon name="list" size={22} style={{ opacity: isPlaylistOpenDesktop ? 1 : 0.7 }} />
                   </button>
                 )}
-                <button onClick={toggleDesktopLyrics} className="cursor-pointer flex-shrink-0">
-                  <Icon
-                    name="lyrics"
-                    size={22}
-                    style={{ opacity: desktopPanelOpen && lyricsLang !== "playlist" ? 1 : 0.7 }}
-                  />
+                <button
+                  onClick={() => setLyricsLang(isPlaylistOpenDesktop ? "ko" : "playlist")}
+                  className="cursor-pointer flex-shrink-0"
+                >
+                  <Icon name="lyrics" size={22} />
                 </button>
               </div>
             </div>
@@ -1075,127 +1093,123 @@ function MusicPlayerContent() {
               </div>
             </div>
 
-            <div className="w-full flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <button onClick={goPrev} disabled={currentIndex === 0} className="cursor-pointer">
-                  <Icon name="chevron-double-left" size={40} />
-                </button>
+            <div className="flex items-center gap-6">
+              <button onClick={goPrev} disabled={currentIndex === 0} className="cursor-pointer">
+                <Icon name="chevron-double-left" size={40} />
+              </button>
 
-                <button
-                  onClick={handleTogglePlay}
-                  disabled={!ready}
-                  className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
-                >
-                  {!ready || buffering ? (
-                    <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
-                  ) : playing ? (
-                    <Icon name="pause" size={45} />
-                  ) : (
-                    <Icon name="play" size={45} />
-                  )}
-                </button>
+              <button
+                onClick={handleTogglePlay}
+                disabled={!ready}
+                className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
+              >
+                {!ready || buffering ? (
+                  <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
+                ) : playing ? (
+                  <Icon name="pause" size={45} />
+                ) : (
+                  <Icon name="play" size={45} />
+                )}
+              </button>
 
-                <button className="cursor-pointer" onClick={goNext} disabled={currentIndex >= tracks.length - 1}>
-                  <Icon name="chevron-double-right" size={40} />
-                </button>
-              </div>
+              <button className="cursor-pointer" onClick={goNext} disabled={currentIndex >= tracks.length - 1}>
+                <Icon name="chevron-double-right" size={40} />
+              </button>
+            </div>
 
-              <div className="flex items-center gap-2 w-40">
-                <button className="cursor-pointer" onClick={toggleMute}>
-                  {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volumePercent}
-                  onChange={(e) => setVolume(Number(e.target.value))}
-                  className="progress-range flex-1"
-                  style={{
-                    background: `linear-gradient(to right, ${rangeColor} ${volumePercent}%, rgba(255,255,255,0.2) ${volumePercent}%)`,
-                  }}
-                />
-              </div>
+            <div className="flex items-center gap-2 w-40">
+              <button className="cursor-pointer" onClick={toggleMute}>
+                {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={volumePercent}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="progress-range flex-1"
+                style={{
+                  background: `linear-gradient(to right, ${rangeColor} ${volumePercent}%, rgba(255,255,255,0.2) ${volumePercent}%)`,
+                }}
+              />
             </div>
 
             {tracks.length > 1 && (
-              <div className="w-full text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
+              <div className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
                 {currentIndex + 1} / {tracks.length}곡
               </div>
             )}
           </div>
 
-          {desktopPanelOpen && (
-            <div className="w-1/2 lg:flex-1 flex flex-col justify-center pr-16 pl-8">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex-1">
-                  {lyricsLang !== "playlist" && (currentTrack.lyrics.length > 1 || hasSyncedLyrics) && (
-                    <div className="flex justify-center gap-2">
-                      {currentTrack.lyrics.map((l) => (
-                        <button
-                          key={l.language}
-                          onClick={() => setLyricsLang(l.language)}
-                          className="px-3 py-1 rounded-full text-sm"
-                          style={{
-                            background: lyricsLang === l.language ? "rgba(255,255,255,0.2)" : "transparent",
-                            color: lyricsLang === l.language ? "#fff" : "rgba(255,255,255,0.5)",
-                          }}
-                        >
-                          {l.language === "ko" ? "한국어" : l.language === "ja" ? "일본어" : l.language}
-                        </button>
-                      ))}
-                      {hasSyncedLyrics && (
-                        <button
-                          onClick={() => setLyricsLang("synced")}
-                          className="px-3 py-1 rounded-full text-sm"
-                          style={{
-                            background: lyricsLang === "synced" ? "rgba(255,255,255,0.2)" : "transparent",
-                            color: lyricsLang === "synced" ? "#fff" : "rgba(255,255,255,0.5)",
-                          }}
-                        >
-                          실시간
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {lyricsLang === "playlist" && (
-                    <span className="px-3 py-1 rounded-full text-sm" style={{ background: "rgba(255,255,255,0.2)" }}>
-                      재생목록 · {tracks.length}곡
-                    </span>
-                  )}
-                </div>
-                <button onClick={() => setDesktopPanelOpen(false)} className="cursor-pointer flex-shrink-0 ml-2">
-                  <Icon name="close" size={20} />
-                </button>
-              </div>
-
-              <div className="h-[70vh]">
-                {lyricsLang === "playlist" ? (
-                  <PlaylistTabView tracks={tracks} currentIndex={currentIndex} onSelectTrack={selectTrack} />
-                ) : !ready || buffering ? (
-                  <LoadingDots />
-                ) : lyricsLang === "synced" ? (
-                  <SyncedLyricsView syncedLyrics={currentTrack.syncedLyrics} currentTime={currentTime} />
-                ) : (
-                  currentLyrics && (
-                    <div className="h-full px-2 overflow-y-auto text-center scrollbar-thin">
-                      {currentLyrics.content
-                        .split("\n")
-                        .filter((line) => line.trim().length > 0)
-                        .map((line, i) => (
-                          <p
-                            key={i}
-                            className="my-2 text-lg leading-relaxed"
-                            style={{ color: "rgba(255,255,255,0.85)" }}
-                            dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(line) }}
-                          />
-                        ))}
-                    </div>
-                  )
+          <div className="w-1/2 lg:flex-1 flex flex-col justify-center pr-16 pl-8">
+            {!isPlaylistOpenDesktop && (currentTrack.lyrics.length > 1 || hasSyncedLyrics) && (
+              <div className="flex justify-center gap-2 mb-4">
+                {currentTrack.lyrics.map((l) => (
+                  <button
+                    key={l.language}
+                    onClick={() => setLyricsLang(l.language)}
+                    className="px-3 py-1 rounded-full text-sm"
+                    style={{
+                      background: lyricsLang === l.language ? "rgba(255,255,255,0.2)" : "transparent",
+                      color: lyricsLang === l.language ? "#fff" : "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    {l.language === "ko" ? "한국어" : l.language === "ja" ? "일본어" : l.language}
+                  </button>
+                ))}
+                {hasSyncedLyrics && (
+                  <button
+                    onClick={() => setLyricsLang("synced")}
+                    className="px-3 py-1 rounded-full text-sm"
+                    style={{
+                      background: lyricsLang === "synced" ? "rgba(255,255,255,0.2)" : "transparent",
+                      color: lyricsLang === "synced" ? "#fff" : "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    실시간
+                  </button>
                 )}
               </div>
+            )}
+
+            {isPlaylistOpenDesktop && (
+              <div className="flex justify-center mb-4">
+                <span className="px-3 py-1 rounded-full text-sm" style={{ background: "rgba(255,255,255,0.2)" }}>
+                  재생목록 · {tracks.length}곡
+                </span>
+              </div>
+            )}
+
+            <div className="h-[70vh]">
+              {isPlaylistOpenDesktop ? (
+                <PlaylistTabView tracks={tracks} currentIndex={currentIndex} onSelectTrack={selectTrack} />
+              ) : !ready || buffering ? (
+                <LoadingDots />
+              ) : lyricsLang === "synced" ? (
+                <SyncedLyricsView
+                  syncedLyrics={currentTrack.syncedLyrics}
+                  syncedMarkers={currentTrack.syncedMarkers}
+                  currentTime={currentTime}
+                />
+              ) : (
+                currentLyrics && (
+                  <div className="h-full px-2 overflow-y-auto text-center scrollbar-thin">
+                    {currentLyrics.content
+                      .split("\n")
+                      .filter((line) => line.trim().length > 0)
+                      .map((line, i) => (
+                        <p
+                          key={i}
+                          className="my-2 text-lg leading-relaxed"
+                          style={{ color: "rgba(255,255,255,0.85)" }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(line) }}
+                        />
+                      ))}
+                  </div>
+                )
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

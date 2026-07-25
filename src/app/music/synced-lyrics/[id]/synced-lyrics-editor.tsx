@@ -149,10 +149,12 @@ export function SyncedLyricsEditor({
     }));
 
     setLines((prev) => [...prev.slice(0, insertAt), ...newLines, ...prev.slice(insertAt)]);
+    setTimelineOrder(null);
   };
 
   const removePair = (indices: number[]) => {
     setLines((prev) => prev.filter((_, i) => !indices.includes(i)));
+    setTimelineOrder(null);
   };
 
   const updateLineText = (index: number, text: string) => {
@@ -162,10 +164,12 @@ export function SyncedLyricsEditor({
   const addMarker = (label: string) => {
     const time = Math.round(currentTime * 1000);
     setMarkers((prev) => [...prev, { id: generateId(), label, time }]);
+    setTimelineOrder(null);
   };
 
   const removeMarker = (id: string) => {
     setMarkers((prev) => prev.filter((m) => m.id !== id));
+    setTimelineOrder(null);
   };
 
   const restampMarker = (id: string) => {
@@ -369,6 +373,9 @@ export function SyncedLyricsEditor({
                         <span
                           className="text-sm text-gray-500 w-16 cursor-pointer"
                           onClick={() => stampPair(pair.indices)}
+                          draggable={false}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
                         >
                           {(representativeTime / 1000).toFixed(2)}s
                         </span>
@@ -385,6 +392,9 @@ export function SyncedLyricsEditor({
                                 className="min-h-[60px] resize-none"
                                 value={line.text}
                                 onChange={(e) => updateLineText(lineGlobalIndex, e.target.value)}
+                                draggable={false}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
                               />
                             </div>
                           );
