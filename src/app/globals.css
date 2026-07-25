@@ -142,9 +142,14 @@ body {
     border-radius: 9999px;
     outline: none;
     cursor: pointer;
+    transition: transform 0.15s ease;
   }
 
-  /* 손잡이(thumb) 숨기기 — Webkit (Chrome, Safari, Edge) */
+  .progress-range:hover {
+    transform: scaleY(1.8);
+  }
+
+  /* thumb 숨기기 — Webkit */
   .progress-range::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
@@ -153,7 +158,7 @@ body {
     opacity: 0;
   }
 
-  /* 손잡이(thumb) 숨기기 — Firefox */
+  /* thumb 숨기기 — Firefox */
   .progress-range::-moz-range-thumb {
     width: 0;
     height: 0;
@@ -161,7 +166,6 @@ body {
     border: none;
   }
 
-  /* 트랙 기본 스타일 제거 (실제 채워진 색은 inline style의 linear-gradient가 담당) */
   .progress-range::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 9999px;

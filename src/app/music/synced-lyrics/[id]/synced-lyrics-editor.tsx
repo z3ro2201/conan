@@ -206,6 +206,9 @@ export function SyncedLyricsEditor({
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         seek(Math.min(currentTime + 5, duration || currentTime + 5));
+      } else if (e.key === " " || e.code === "Space") {
+        e.preventDefault(); // 스크롤/버튼 재클릭 등 기본 동작 방지
+        togglePlay();
       }
     };
 
