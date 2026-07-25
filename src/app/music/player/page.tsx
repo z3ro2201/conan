@@ -6,6 +6,7 @@ import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
 import Link from "next/link";
+import { sanitizeRubyHtml } from "@/lib/utils/sanitize-ruby";
 
 type SyncedLine = { time: number; text: string };
 
@@ -135,9 +136,8 @@ function SyncedLyricsView({ syncedLyrics, currentTime }: SyncedLyricsViewProps) 
           key={i}
           className="lyric-wave-in text-2xl font-bold"
           style={{ color: "#fff", animationDelay: `${i * 0.08}s` }}
-        >
-          {line.text}
-        </div>
+          dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(line.text) }}
+        />
       ))}
     </div>
   );
@@ -514,9 +514,12 @@ function ExpandedMobileView({
                   .split("\n")
                   .filter((line) => line.trim().length > 0)
                   .map((line, i) => (
-                    <p key={i} className="my-2 text-lg leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
-                      {line}
-                    </p>
+                    <p
+                      key={i}
+                      className="my-2 text-lg leading-relaxed"
+                      style={{ color: "rgba(255,255,255,0.85)" }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(line) }}
+                    />
                   ))}
               </div>
             )
@@ -799,6 +802,23 @@ function MusicPlayerContent() {
     onEnded: goNext,
     autoplay: shouldAutoplay,
   });
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        seek(Math.max(currentTime - 5, 0));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        seek(Math.min(currentTime + 5, duration || currentTime + 5));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentTime, duration, seek]);
 
   if (loading) return <div>불러오는 중...</div>;
   if (error) return <div>{error}</div>;
