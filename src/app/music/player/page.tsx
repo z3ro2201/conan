@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
-import { sanitizeRubyHtml } from "@/lib/utils/sanitize-ruby";
+import { sanitizeRubyHtml, stripGroupTags } from "@/lib/utils/sanitize-ruby";
+
 import Link from "next/link";
 
 const MessageWindow = ({ type, text }: { type: "LOADING" | "ERROR"; text: string }) => {
@@ -189,7 +190,7 @@ function SegmentedText({ segments, currentTimeMs }: { segments: SyncedSegment[];
           <span
             key={i}
             style={{ color: isPast ? "#fff" : "rgba(255,255,255,0.3)", transition: "color 0.15s linear" }}
-            dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(seg.text) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(stripGroupTags(seg.text)) }}
           />
         );
       })}

@@ -1,8 +1,10 @@
 export function sanitizeRubyHtml(text: string): string {
-  // ruby, rt 태그만 허용하고 나머지 태그는 이스케이프
-  const allowedTags = /<\/?(?:ruby|rt|rp)>/g;
   const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // 허용된 태그만 다시 원래대로 복원
-  return escaped.replace(/&lt;(\/?(?:ruby|rt|rp))&gt;/g, "<$1>");
+  return escaped.replace(/&lt;(\/?(?:ruby|rt|rp|group))&gt;/g, "<$1>");
+}
+
+// 실시간 재생 화면 등에서 group 태그만 벗겨내고 텍스트는 그대로 살리는 헬퍼
+export function stripGroupTags(text: string): string {
+  return text.replace(/<\/?group>/g, "");
 }

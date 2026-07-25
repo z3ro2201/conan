@@ -83,21 +83,35 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+// <ruby>...</ruby> 또는 <group>...</group> 태그는 하나의 조각으로 유지하고,
+// 그 외 텍스트는 영단어/숫자는 통째로, 나머지(한글/일본어/공백/기호)는 글자 단위로 분할
 function buildInitialSegments(text: string): SyncedSegment[] {
-  const rubyPattern = /<ruby>.*?<\/ruby>/g;
-  const parts: string[] = [];
+  const blockPattern = /<ruby>.*?<\/ruby>|<group>.*?<\/group>/g;
+  const chunks: string[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = rubyPattern.exec(text)) !== null) {
+  while ((match = blockPattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(...Array.from(text.slice(lastIndex, match.index)));
+      chunks.push(text.slice(lastIndex, match.index));
     }
-    parts.push(match[0]);
+    chunks.push(match[0]);
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) {
-    parts.push(...Array.from(text.slice(lastIndex)));
+    chunks.push(text.slice(lastIndex));
+  }
+
+  const parts: string[] = [];
+  for (const chunk of chunks) {
+    if (chunk.startsWith("<ruby>") || chunk.startsWith("<group>")) {
+      parts.push(chunk);
+      continue;
+    }
+
+    const wordPattern = /[A-Za-z0-9']+|[^A-Za-z0-9']/g;
+    const wordMatches = chunk.match(wordPattern) ?? [];
+    parts.push(...wordMatches);
   }
 
   return parts.filter((p) => p.length > 0).map((p) => ({ text: p, time: 0 }));
@@ -212,6 +226,13 @@ export function SyncedLyricsEditor({
         if (line.segments && line.segments.length > 0) return line;
         return { ...line, segments: buildInitialSegments(line.text) };
       }),
+    );
+  };
+
+  // 이미 segments가 있어도 현재 텍스트 기준으로 강제로 다시 나눔 (타이밍은 초기화됨)
+  const rebuildSegments = (lineGlobalIndex: number) => {
+    setLines((prev) =>
+      prev.map((line, i) => (i === lineGlobalIndex ? { ...line, segments: buildInitialSegments(line.text) } : line)),
     );
   };
 
@@ -342,8 +363,6 @@ export function SyncedLyricsEditor({
     );
   }
 
-  // 서버 렌더링 시점 및 클라이언트 첫 렌더에서는 DndContext(useId 사용)를 그리지 않아
-  // 하이드레이션 불일치를 방지. useEffect가 돈 이후에만 실제 UI를 렌더링.
   if (!mounted) {
     return <div className="h-[calc(100%-60px-1rem)]" />;
   }
@@ -537,6 +556,12 @@ export function SyncedLyricsEditor({
                                 </button>
                               </div>
                             ))}
+                            <button
+                              onClick={() => rebuildSegments(lineGlobalIndex)}
+                              className="text-xs text-orange-500 ml-2"
+                            >
+                              다시 나누기
+                            </button>
                             <button
                               onClick={() => clearSegments(lineGlobalIndex)}
                               className="text-xs text-red-500 ml-auto"
