@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Typography } from "@/components/ui/typography";
 import { Icon } from "@/components/ui/icon";
 import { Checkbox } from "@/components/ui/checkbox";
-import cn from "@/lib/utils/cn";
+import { getTrackDisplayTitle } from "@/lib/utils/getTrackDisplayTitle";
 
 interface SerializedTrack {
   id: string;
@@ -34,12 +34,10 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
 
   const clearSelection = () => setSelectedIds([]);
 
-  // 재생 버튼: 새창으로 열되, 이미 열려있으면 그 창을 재사용
   const playTrack = (trackId: string) => {
     window.open(`/music/player?playId=${trackId}`, PLAYER_WINDOW_NAME);
   };
 
-  // 선택된 여러 곡 재생: 단일 곡이면 쿼리스트링, 여러 곡이면 sessionStorage
   const playSelected = () => {
     if (selectedIds.length === 0) return;
 
@@ -52,7 +50,6 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
     window.open("/music/player", PLAYER_WINDOW_NAME);
   };
 
-  // "재생목록에 추가": 플레이어 창이 열려있으면 postMessage로 곡 추가, 없으면 새로 재생 시작
   const addToPlaylist = (trackId: string) => {
     const playerWindow = window.open("", PLAYER_WINDOW_NAME);
 
@@ -68,8 +65,6 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
   if (tracks.length === 0) {
     return <div className="p-8">등록된 곡이 없습니다.</div>;
   }
-
-  console.log(tracks);
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,9 +102,7 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
           <ul className="list-none m-0 p-0">
             {tracks.map((track) => {
               const isSelected = selectedIds.includes(track.id);
-              const title = track.titles.find((t) => t.language === "ko")?.title ?? track.artist;
-              const titleKR = track.titles.find((t) => t.language === "ko")?.title ?? track.artist;
-              const titleJP = track.titles.find((t) => t.language === "jp")?.title ?? track.artist;
+              const title = getTrackDisplayTitle(track);
 
               return (
                 <li key={track.id} className="border-b border-background last:border-none">
@@ -128,13 +121,14 @@ export function MusicPageClient({ tracks }: MusicPageClientProps) {
                       <span aria-hidden="true" className="w-6 text-center text-muted-light">
                         <Icon name="play" size={13} className="mx-auto" />
                       </span>
-                      <span className="flex-1 text-sm font-medium text-foreground">
-                        <span className="block text-gray-500">{track.series.title}</span>
-                        <span className="block">
-                          {track.artist}&nbsp;-&nbsp;{track.dubType === "ORIGINAL" ? titleJP : titleKR} (
-                          {track.dubType !== "ORIGINAL" ? titleJP : titleKR})
+                      <div className="flex-1">
+                        {track.series.title && (
+                          <span className="block text-xs text-gray-500">{track.series.title}</span>
+                        )}
+                        <span className="block text-sm font-medium text-foreground">
+                          {title} - {track.artist}
                         </span>
-                      </span>
+                      </div>
                     </button>
 
                     <button
