@@ -300,10 +300,13 @@ function MiniPlayerView({
         </div>
 
         <div
-          className="progress-range w-full h-1 rounded-full"
-          style={{
-            background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-          }}
+          className="progress-range progress-range-playhead w-full h-1 rounded-full"
+          style={
+            {
+              background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
+              "--progress-percent": `${progressPercent}%`,
+            } as React.CSSProperties
+          }
         />
         <div className="flex justify-between mt-1 mb-4">
           <span className="text-xs tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -543,10 +546,13 @@ function ExpandedMobileView({
             seek(Number((e.target as HTMLInputElement).value));
             setSeeking(null);
           }}
-          className="progress-range w-full"
-          style={{
-            background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-          }}
+          className="progress-range progress-range-playhead w-full"
+          style={
+            {
+              background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
+              "--progress-percent": `${progressPercent}%`,
+            } as React.CSSProperties
+          }
         />
         <div className="flex justify-between mt-1 mb-3">
           <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
@@ -1051,10 +1057,13 @@ function MusicPlayerContent() {
                   seek(Number((e.target as HTMLInputElement).value));
                   setSeeking(null);
                 }}
-                className="progress-range w-full"
-                style={{
-                  background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-                }}
+                className="progress-range progress-range-playhead w-full"
+                style={
+                  {
+                    background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
+                    "--progress-percent": `${progressPercent}%`,
+                  } as React.CSSProperties
+                }
               />
               <div className="flex justify-between mt-1">
                 <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
