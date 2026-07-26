@@ -12,7 +12,7 @@ const MessageWindow = ({ type, text }: { type: "LOADING" | "ERROR"; text: string
   return (
     <div
       className="w-screen h-screen absolute top-0 left-0 z-100 flex items-center justify-center flex-col gap-2"
-      style={{ background: "linear-gradient(180deg, #1e1e1e 0%, #3a3a3a 100%)" }}
+      style={{ background: "linear-gradient(180deg, #1e1e1e 0%, #3a3a3a 100%)", color: "#fff" }}
     >
       {type === "LOADING" && (
         <div className="flex items-center justify-center gap-1.5">
@@ -331,6 +331,8 @@ interface MiniPlayerViewProps {
   onShowPlaylist: () => void;
   currentIndex: number;
   tracksLength: number;
+  repeatMode: "off" | "all" | "one";
+  onCycleRepeat: () => void;
 }
 
 function MiniPlayerView({
@@ -354,6 +356,8 @@ function MiniPlayerView({
   onShowPlaylist,
   currentIndex,
   tracksLength,
+  repeatMode,
+  onCycleRepeat,
 }: MiniPlayerViewProps) {
   const title =
     currentTrack.dubType === "ORIGINAL" ? (titleMap.ja ?? currentTrack.artist) : (titleMap.ko ?? currentTrack.artist);
@@ -398,6 +402,13 @@ function MiniPlayerView({
                 <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
               </button>
             )}
+            <button onClick={onCycleRepeat} className="cursor-pointer flex-shrink-0">
+              <Icon
+                name={repeatMode === "one" ? "repeat-one" : "repeat"}
+                size={22}
+                style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
+              />
+            </button>
             <button onClick={onExpand} className="cursor-pointer flex-shrink-0">
               <Icon name="chevron-double-up" size={22} />
             </button>
@@ -451,7 +462,7 @@ function MiniPlayerView({
           </button>
           <button
             onClick={goNext}
-            disabled={currentIndex >= tracksLength - 1}
+            disabled={currentIndex >= tracksLength - 1 && repeatMode !== "all"}
             className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Icon name="chevron-double-right" size={28} />
@@ -495,6 +506,8 @@ interface ExpandedMobileViewProps {
   onCollapse: () => void;
   tracks: TrackWithRelations[];
   onSelectTrack: (index: number) => void;
+  repeatMode: "off" | "all" | "one";
+  onCycleRepeat: () => void;
 }
 
 function ExpandedMobileView({
@@ -530,6 +543,8 @@ function ExpandedMobileView({
   onCollapse,
   tracks,
   onSelectTrack,
+  repeatMode,
+  onCycleRepeat,
 }: ExpandedMobileViewProps) {
   const isPlaylistOpen = lyricsLang === "playlist";
   const togglePlaylist = () => setLyricsLang(isPlaylistOpen ? "ko" : "playlist");
@@ -566,6 +581,13 @@ function ExpandedMobileView({
               <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
             </button>
           )}
+          <button onClick={onCycleRepeat} className="cursor-pointer flex-shrink-0">
+            <Icon
+              name={repeatMode === "one" ? "repeat-one" : "repeat"}
+              size={22}
+              style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
+            />
+          </button>
           <button onClick={togglePlaylist} className="cursor-pointer flex-shrink-0">
             <Icon name="list" size={22} style={{ opacity: isPlaylistOpen ? 1 : 0.7 }} />
           </button>
@@ -713,7 +735,7 @@ function ExpandedMobileView({
             <button
               className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={goNext}
-              disabled={currentIndex >= tracksLength - 1}
+              disabled={currentIndex >= tracksLength - 1 && repeatMode !== "all"}
             >
               <Icon name="chevron-double-right" size={32} />
             </button>
@@ -758,11 +780,16 @@ function MusicPlayerContent() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [videoOverride, setVideoOverride] = useState(false);
   const [desktopPanelOpen, setDesktopPanelOpen] = useState(true);
+  const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
 
   const desktopAlbumSlotRef = useRef<HTMLDivElement>(null);
   const miniAlbumSlotRef = useRef<HTMLDivElement>(null);
   const expandedAlbumSlotRef = useRef<HTMLDivElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+
+  const cycleRepeatMode = useCallback(() => {
+    setRepeatMode((m) => (m === "off" ? "all" : m === "all" ? "one" : "off"));
+  }, []);
 
   useEffect(() => {
     const playIdParamRaw = (searchParams.get("playId") ?? "").trim();
@@ -899,9 +926,15 @@ function MusicPlayerContent() {
         if (userInteracted) setShouldAutoplay(true);
         return i + 1;
       }
+      if (repeatMode === "all" && tracks.length > 0) {
+        const nextTrack = tracks[0];
+        if (nextTrack) setLyricsLang(getPreferredLyricsLang(nextTrack));
+        if (userInteracted) setShouldAutoplay(true);
+        return 0;
+      }
       return i;
     });
-  }, [tracks, userInteracted]);
+  }, [tracks, userInteracted, repeatMode]);
 
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => {
@@ -925,6 +958,9 @@ function MusicPlayerContent() {
     [userInteracted, tracks],
   );
 
+  const handleTrackEndedRef = useRef<() => void>(() => {});
+  const handleTrackEndedStable = useCallback(() => handleTrackEndedRef.current(), []);
+
   const {
     containerRef,
     ready,
@@ -936,13 +972,25 @@ function MusicPlayerContent() {
     muted,
     togglePlay,
     seek,
+    play,
     setVolume,
     toggleMute,
   } = useYouTubePlayer({
     videoId,
-    onEnded: goNext,
+    onEnded: handleTrackEndedStable,
     autoplay: shouldAutoplay,
   });
+
+  useEffect(() => {
+    handleTrackEndedRef.current = () => {
+      if (repeatMode === "one") {
+        seek(0);
+        play();
+        return;
+      }
+      goNext();
+    };
+  }, [repeatMode, seek, play, goNext]);
 
   const handleTogglePlay = useCallback(() => {
     setUserInteracted(true);
@@ -1233,13 +1281,20 @@ function MusicPlayerContent() {
                 <button
                   className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   onClick={goNext}
-                  disabled={currentIndex >= tracks.length - 1}
+                  disabled={currentIndex >= tracks.length - 1 && repeatMode !== "all"}
                 >
                   <Icon name="chevron-double-right" size={40} />
                 </button>
               </div>
 
               <div className="flex items-center gap-2 w-40">
+                <button onClick={cycleRepeatMode} className="cursor-pointer">
+                  <Icon
+                    name={repeatMode === "one" ? "repeat-one" : "repeat"}
+                    size={20}
+                    style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
+                  />
+                </button>
                 <button className="cursor-pointer" onClick={toggleMute}>
                   {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
                 </button>
@@ -1381,6 +1436,8 @@ function MusicPlayerContent() {
             onCollapse={() => setIsExpanded(false)}
             tracks={tracks}
             onSelectTrack={selectTrack}
+            repeatMode={repeatMode}
+            onCycleRepeat={cycleRepeatMode}
           />
         ) : (
           <MiniPlayerView
@@ -1407,6 +1464,8 @@ function MusicPlayerContent() {
             }}
             currentIndex={currentIndex}
             tracksLength={tracks.length}
+            repeatMode={repeatMode}
+            onCycleRepeat={cycleRepeatMode}
           />
         )}
       </div>

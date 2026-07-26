@@ -100,7 +100,9 @@ export type IconName =
   | "eye"
   | "eye-off"
   | "upload"
-  | "youtube";
+  | "youtube"
+  | "repeat"
+  | "repeat-one";
 
 const FILLED_ICONS: IconName[] = [
   "play",
@@ -702,6 +704,23 @@ const paths: Record<IconName, React.ReactNode> = {
       <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="currentColor" stroke="none" />
     </>
   ),
+  repeat: (
+    <>
+      <path d="m17 2 4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </>
+  ), // 반복(전체)
+  "repeat-one": (
+    <>
+      <path d="m17 2 4 4-4 4" />
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" />
+      <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+      <path d="M11 10h1v4" />
+    </>
+  ), // 반복(한 곡)
 };
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
