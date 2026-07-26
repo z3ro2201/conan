@@ -83,8 +83,6 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-// <ruby>...</ruby> 또는 <group>...</group> 태그는 하나의 조각으로 유지하고,
-// 그 외 텍스트는 영단어/숫자는 통째로, 나머지(한글/일본어/공백/기호)는 글자 단위로 분할
 function buildInitialSegments(text: string): SyncedSegment[] {
   const blockPattern = /<ruby>.*?<\/ruby>|<group>.*?<\/group>/g;
   const chunks: string[] = [];
@@ -130,6 +128,42 @@ function SortableTimelineItem({ id, children }: { id: string; children: React.Re
     <li ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {children}
     </li>
+  );
+}
+
+function SegmentTimeInput({ time, onCommit }: { time: number; onCommit: (newTimeMs: number) => void }) {
+  const [draft, setDraft] = useState((time / 1000).toFixed(2));
+
+  useEffect(() => {
+    setDraft((time / 1000).toFixed(2));
+  }, [time]);
+
+  const commit = () => {
+    const parsed = parseFloat(draft);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      onCommit(Math.round(parsed * 1000));
+    } else {
+      setDraft((time / 1000).toFixed(2));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="text-xs text-gray-400 tabular-nums w-14 bg-transparent border-b border-transparent focus:border-gray-300 outline-none"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      draggable={false}
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    />
   );
 }
 
@@ -229,7 +263,6 @@ export function SyncedLyricsEditor({
     );
   };
 
-  // 이미 segments가 있어도 현재 텍스트 기준으로 강제로 다시 나눔 (타이밍은 초기화됨)
   const rebuildSegments = (lineGlobalIndex: number) => {
     setLines((prev) =>
       prev.map((line, i) => (i === lineGlobalIndex ? { ...line, segments: buildInitialSegments(line.text) } : line)),
@@ -242,6 +275,16 @@ export function SyncedLyricsEditor({
       prev.map((line, i) => {
         if (i !== lineGlobalIndex || !line.segments) return line;
         const newSegments = line.segments.map((seg, si) => (si === segIndex ? { ...seg, time } : seg));
+        return { ...line, segments: newSegments };
+      }),
+    );
+  };
+
+  const setSegmentTime = (lineGlobalIndex: number, segIndex: number, newTimeMs: number) => {
+    setLines((prev) =>
+      prev.map((line, i) => {
+        if (i !== lineGlobalIndex || !line.segments) return line;
+        const newSegments = line.segments.map((seg, si) => (si === segIndex ? { ...seg, time: newTimeMs } : seg));
         return { ...line, segments: newSegments };
       }),
     );
@@ -451,10 +494,14 @@ export function SyncedLyricsEditor({
                   <SortableTimelineItem key={item.id} id={item.id}>
                     <div className="flex items-center gap-2 py-2 mb-1 bg-gray-100 rounded px-2 cursor-move">
                       <GripVerticalIcon size={16} className="text-gray-400" />
-                      <span className="text-sm text-gray-500 w-16" onClick={() => restampMarker(item.marker.id)}>
+                      <span
+                        className="text-sm text-gray-500 w-16 cursor-pointer"
+                        onClick={() => restampMarker(item.marker.id)}
+                      >
                         {(item.marker.time / 1000).toFixed(2)}s
                       </span>
                       <span className="flex-1 font-medium text-gray-600">— {item.marker.label} —</span>
+
                       <button onClick={() => removeMarker(item.marker.id)} className="text-sm text-red-500">
                         삭제
                       </button>
@@ -487,7 +534,10 @@ export function SyncedLyricsEditor({
                         {pair.lines.map((line) => {
                           const lineGlobalIndex = lines.indexOf(line);
                           return (
-                            <div key={line.language} className="flex items-start gap-2">
+                            <div
+                              key={line.language}
+                              className="mb-1 py-1 flex items-start gap-2 border-b border-gray-300 border-solid"
+                            >
                               <span className="w-6 text-xs text-gray-400 mt-1">
                                 {LANG_LABELS[line.language] ?? line.language}
                               </span>
@@ -495,7 +545,7 @@ export function SyncedLyricsEditor({
                                 value={line.text}
                                 onChange={(e) => updateLineText(lineGlobalIndex, e.target.value)}
                                 className="flex-1 bg-transparent border-b border-transparent focus:border-gray-300 outline-none resize-none py-0.5 leading-snug"
-                                rows={1}
+                                rows={2}
                                 draggable={false}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onMouseDown={(e) => e.stopPropagation()}
@@ -516,7 +566,7 @@ export function SyncedLyricsEditor({
                         })}
                       </div>
                     </div>
-                    <div className="flex w-full justify-end items-center gap-2">
+                    <div className="flex w-full justify-end gap-2">
                       <button onClick={() => insertLineAfter(pairIndex)} className="text-sm text-blue-500 mt-1">
                         + 줄 추가
                       </button>
@@ -524,6 +574,7 @@ export function SyncedLyricsEditor({
                         삭제
                       </button>
                     </div>
+
                     {isPrecisionOpen &&
                       pair.lines.map((line) => {
                         const lineGlobalIndex = lines.indexOf(line);
@@ -537,30 +588,36 @@ export function SyncedLyricsEditor({
                             <span className="text-xs text-gray-400 w-6">{LANG_LABELS[line.language]}</span>
                             {line.segments.map((seg, segIndex) => (
                               <div key={segIndex} className="flex items-center gap-1 bg-white rounded px-2 py-1 border">
-                                <span
-                                  className="text-xs text-gray-400 tabular-nums"
-                                  onClick={() => stampSegment(lineGlobalIndex, segIndex)}
-                                >
-                                  {(seg.time / 1000).toFixed(2)}s
-                                </span>
+                                <SegmentTimeInput
+                                  time={seg.time}
+                                  onCommit={(newTimeMs) => setSegmentTime(lineGlobalIndex, segIndex, newTimeMs)}
+                                />
                                 <span
                                   className="text-sm"
                                   dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(seg.text) }}
                                 />
+                                <button
+                                  onClick={() => stampSegment(lineGlobalIndex, segIndex)}
+                                  className="text-xs text-blue-500 ml-1"
+                                >
+                                  지금!
+                                </button>
                               </div>
                             ))}
-                            <button
-                              onClick={() => rebuildSegments(lineGlobalIndex)}
-                              className="text-xs text-orange-500 ml-2"
-                            >
-                              다시 나누기
-                            </button>
-                            <button
-                              onClick={() => clearSegments(lineGlobalIndex)}
-                              className="text-xs text-red-500 ml-auto"
-                            >
-                              정밀 모드 끄기
-                            </button>
+                            <div className="flex-1 gap-2 justify-end">
+                              <button
+                                onClick={() => rebuildSegments(lineGlobalIndex)}
+                                className="text-xs text-orange-500 ml-2 cursor-pointer"
+                              >
+                                다시 나누기
+                              </button>
+                              <button
+                                onClick={() => clearSegments(lineGlobalIndex)}
+                                className="text-xs text-red-500 ml-auto cursor-pointer"
+                              >
+                                정밀 모드 끄기
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
