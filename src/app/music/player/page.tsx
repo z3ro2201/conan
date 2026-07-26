@@ -6,25 +6,22 @@ import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
 import { sanitizeRubyHtml, stripGroupTags } from "@/lib/utils/sanitize-ruby";
+import { LoadingDots } from "@/components/ui/loadingDots";
 import Link from "next/link";
-
-const MessageWindow = ({ type, text }: { type: "LOADING" | "ERROR"; text: string }) => {
-  return (
-    <div
-      className="w-screen h-screen absolute top-0 left-0 z-100 flex items-center justify-center flex-col gap-2"
-      style={{ background: "linear-gradient(180deg, #1e1e1e 0%, #3a3a3a 100%)", color: "#fff" }}
-    >
-      {type === "LOADING" && (
-        <div className="flex items-center justify-center gap-1.5">
-          <span className="loading-dot w-3 h-3 rounded-full bg-white/40" />
-          <span className="loading-dot w-3 h-3 rounded-full bg-white/40" />
-          <span className="loading-dot w-3 h-3 rounded-full bg-white/40" />
-        </div>
-      )}
-      <h1>{text}</h1>
-    </div>
-  );
-};
+import {
+  ExpandButton,
+  GoNextButton,
+  GoPrevButton,
+  ListButton,
+  LyricsButton,
+  PlayButton,
+  PlayTimeDisplay,
+  RepeatButton,
+  SeekBar,
+  YoutubeButton,
+} from "@/components/ui/player-ui";
+import { MessageWindow } from "@/components/ui/player-ui";
+import { repeatModeTypes } from "@/lib/utils/player";
 
 type SyncedSegment = { text: string; time: number };
 type SyncedLine = { time: number; text: string; segments?: SyncedSegment[] };
@@ -97,24 +94,7 @@ const fetchTracks = async (playIds: string[]): Promise<TrackWithRelations[]> => 
   return playIds.map((id) => tracks.find((t) => t.id === id)).filter((t): t is TrackWithRelations => Boolean(t));
 };
 
-const formatTime = (seconds: number) => {
-  if (!Number.isFinite(seconds)) return "0:00";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-};
-
 const LANGUAGE_PRIORITY: Record<string, number> = { ja: 0, ko: 1, en: 2 };
-
-function LoadingDots() {
-  return (
-    <div className="flex items-center justify-center gap-1.5 h-full">
-      <span className="loading-dot w-2.5 h-2.5 rounded-full bg-white" />
-      <span className="loading-dot w-2.5 h-2.5 rounded-full bg-white" />
-      <span className="loading-dot w-2.5 h-2.5 rounded-full bg-white" />
-    </div>
-  );
-}
 
 function getTrackTitleLine(track: TrackWithRelations): string {
   const ja = track.titles.find((t) => t.language === "ja")?.title;
@@ -227,13 +207,7 @@ function SyncedLyricsView({ syncedLyrics, syncedMarkers, currentTime, currentTra
 
           return (
             <div key={i} className="flex flex-col items-center gap-4">
-              {!isEnd && (
-                <div className="flex items-center justify-center gap-1.5">
-                  <span className="loading-dot w-2 h-2 rounded-full bg-white/40" />
-                  <span className="loading-dot w-2 h-2 rounded-full bg-white/40" />
-                  <span className="loading-dot w-2 h-2 rounded-full bg-white/40" />
-                </div>
-              )}
+              {!isEnd && <LoadingDots isFull={false} className="loading-dot w-2 h-2 rounded-full bg-white/40" />}
               <div>
                 <h1 className="m-0 p-0 text-xl font-bold text-center">{getTrackTitleLine(currentTrack)}</h1>
                 <p className="m-0 p-0 mt-1 text-sm text-center" style={{ color: "rgba(255,255,255,0.5)" }}>
@@ -329,10 +303,14 @@ interface MiniPlayerViewProps {
   handleTogglePlay: () => void;
   onExpand: () => void;
   onShowPlaylist: () => void;
+  onShowLyrics: () => void;
   currentIndex: number;
   tracksLength: number;
-  repeatMode: "off" | "all" | "one";
+  repeatMode: repeatModeTypes;
   onCycleRepeat: () => void;
+  safeDuration: number;
+  setSeeking: (value: number | null) => void;
+  seek: (value: number) => void;
 }
 
 function MiniPlayerView({
@@ -354,10 +332,14 @@ function MiniPlayerView({
   handleTogglePlay,
   onExpand,
   onShowPlaylist,
+  onShowLyrics,
   currentIndex,
   tracksLength,
   repeatMode,
   onCycleRepeat,
+  safeDuration,
+  setSeeking,
+  seek,
 }: MiniPlayerViewProps) {
   const title =
     currentTrack.dubType === "ORIGINAL" ? (titleMap.ja ?? currentTrack.artist) : (titleMap.ko ?? currentTrack.artist);
@@ -397,76 +379,47 @@ function MiniPlayerView({
             </p>
           </button>
           <div className="flex gap-2 justify-end">
-            {artworkUrl && (
-              <button onClick={onToggleVideo} className="cursor-pointer flex-shrink-0">
-                <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
-              </button>
-            )}
-            <button onClick={onCycleRepeat} className="cursor-pointer flex-shrink-0">
-              <Icon
-                name={repeatMode === "one" ? "repeat-one" : "repeat"}
-                size={22}
-                style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
-              />
-            </button>
-            <button onClick={onExpand} className="cursor-pointer flex-shrink-0">
-              <Icon name="chevron-double-up" size={22} />
-            </button>
-            <button onClick={onShowPlaylist} className="cursor-pointer flex-shrink-0">
-              <Icon name="list" size={22} />
-            </button>
-            <button onClick={onShowPlaylist} className="cursor-pointer flex-shrink-0">
-              <Icon name="lyrics" size={22} />
-            </button>
+            {artworkUrl && <YoutubeButton onClick={onToggleVideo} showVideo={showVideo} />}
+            <RepeatButton onClick={onCycleRepeat} repeatMode={repeatMode} />
+            <ExpandButton onClick={onExpand} />
+            <ListButton onClick={onShowPlaylist} />
+            <LyricsButton onClick={onShowLyrics} />
           </div>
         </div>
-
-        <div
-          className="progress-range progress-range-playhead w-full h-1 rounded-full"
-          style={
-            {
-              background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-              "--progress-percent": `${progressPercent}%`,
-            } as React.CSSProperties
-          }
+        <SeekBar
+          progressValue={progressValue}
+          safeDuration={safeDuration}
+          progressPercent={progressPercent}
+          rangeColor={rangeColor}
+          setSeeking={setSeeking}
+          seek={seek}
         />
-        <div className="flex justify-between mt-1 mb-4">
-          <span className="text-xs tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-            {formatTime(progressValue)}
-          </span>
-          <span className="text-xs tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-            -{formatTime(Math.max(duration - progressValue, 0))}
-          </span>
-        </div>
 
+        <PlayTimeDisplay
+          progressValue={progressValue}
+          safeDuration={duration}
+          className="flex justify-between mt-1 mb-4"
+        />
         <div className="flex items-center justify-center gap-8">
-          <button
-            onClick={goPrev}
-            disabled={currentIndex === 0}
-            className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Icon name="chevron-double-left" size={28} />
-          </button>
-          <button
+          <GoPrevButton size={28} onClick={goPrev} currentIndex={currentIndex} />
+
+          <PlayButton
             onClick={handleTogglePlay}
+            playing={playing}
+            ready={ready}
+            buffering={buffering}
             disabled={!ready}
-            className="w-12 h-12 flex items-center justify-center cursor-pointer"
-          >
-            {!ready || buffering ? (
-              <div className="spinner w-7 h-7 rounded-full border-4 border-white/20 border-t-white" />
-            ) : playing ? (
-              <Icon name="pause" size={40} />
-            ) : (
-              <Icon name="play" size={40} />
-            )}
-          </button>
-          <button
+            className="w-12 h-12 flex items-center justify-center"
+            size={7}
+          />
+
+          <GoNextButton
+            currentIndex={currentIndex}
+            tracksLength={tracksLength}
+            repeatMode={repeatMode}
             onClick={goNext}
-            disabled={currentIndex >= tracksLength - 1 && repeatMode !== "all"}
-            className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Icon name="chevron-double-right" size={28} />
-          </button>
+            size={28}
+          />
         </div>
       </div>
     </div>
@@ -506,7 +459,7 @@ interface ExpandedMobileViewProps {
   onCollapse: () => void;
   tracks: TrackWithRelations[];
   onSelectTrack: (index: number) => void;
-  repeatMode: "off" | "all" | "one";
+  repeatMode: repeatModeTypes;
   onCycleRepeat: () => void;
 }
 
@@ -547,7 +500,12 @@ function ExpandedMobileView({
   onCycleRepeat,
 }: ExpandedMobileViewProps) {
   const isPlaylistOpen = lyricsLang === "playlist";
-  const togglePlaylist = () => setLyricsLang(isPlaylistOpen ? "ko" : "playlist");
+
+  // 목록보기/가사보기를 각각 독립된 "이동" 동작으로 분리 — 서로의 상태에 영향받지 않음
+  const openPlaylist = () => setLyricsLang("playlist");
+  const openLyrics = () => {
+    if (lyricsLang === "playlist") setLyricsLang(getPreferredLyricsLang(currentTrack));
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -576,24 +534,14 @@ function ExpandedMobileView({
           </div>
         </div>
         <div className="flex gap-2 items-center justify-end">
-          {artworkUrl && (
-            <button onClick={onToggleVideo} className="cursor-pointer flex-shrink-0">
-              <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
-            </button>
-          )}
-          <button onClick={onCycleRepeat} className="cursor-pointer flex-shrink-0">
-            <Icon
-              name={repeatMode === "one" ? "repeat-one" : "repeat"}
-              size={22}
-              style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
-            />
-          </button>
-          <button onClick={togglePlaylist} className="cursor-pointer flex-shrink-0">
-            <Icon name="list" size={22} style={{ opacity: isPlaylistOpen ? 1 : 0.7 }} />
-          </button>
-          <button onClick={togglePlaylist} className="cursor-pointer flex-shrink-0">
-            <Icon name="lyrics" size={22} style={{ opacity: isPlaylistOpen ? 1 : 0.7 }} />
-          </button>
+          {artworkUrl && <YoutubeButton onClick={onToggleVideo} showVideo={showVideo} />}
+          <RepeatButton
+            onClick={onCycleRepeat}
+            repeatMode={repeatMode}
+            style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
+          />
+          <ListButton onClick={openPlaylist} size={22} style={{ opacity: isPlaylistOpen ? 1 : 0.7 }} />
+          <LyricsButton onClick={openLyrics} size={22} style={{ opacity: !isPlaylistOpen ? 1 : 0.7 }} />
         </div>
       </div>
 
@@ -633,11 +581,7 @@ function ExpandedMobileView({
             <span className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
               재생목록 · {tracksLength}곡
             </span>
-            <button
-              onClick={togglePlaylist}
-              className="text-sm cursor-pointer"
-              style={{ color: "rgba(255,255,255,0.6)" }}
-            >
+            <button onClick={openLyrics} className="text-sm cursor-pointer" style={{ color: "rgba(255,255,255,0.6)" }}>
               닫기
             </button>
           </div>
@@ -647,7 +591,7 @@ function ExpandedMobileView({
           {isPlaylistOpen ? (
             <PlaylistTabView tracks={tracks} currentIndex={currentIndex} onSelectTrack={onSelectTrack} />
           ) : !ready || buffering ? (
-            <LoadingDots />
+            <LoadingDots isFull={true} />
           ) : lyricsLang === "synced" ? (
             <SyncedLyricsView
               syncedLyrics={currentTrack.syncedLyrics}
@@ -676,69 +620,41 @@ function ExpandedMobileView({
       </div>
 
       <div className="w-full px-6 pb-6 pt-3 flex-shrink-0">
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          value={progressValue}
-          onChange={(e) => setSeeking(Number(e.target.value))}
-          onMouseUp={(e) => {
-            seek(Number((e.target as HTMLInputElement).value));
-            setSeeking(null);
-          }}
-          onTouchEnd={(e) => {
-            seek(Number((e.target as HTMLInputElement).value));
-            setSeeking(null);
-          }}
-          className="progress-range progress-range-playhead w-full"
-          style={
-            {
-              background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-              "--progress-percent": `${progressPercent}%`,
-            } as React.CSSProperties
-          }
+        <SeekBar
+          progressValue={progressValue}
+          safeDuration={duration || 0}
+          progressPercent={progressPercent}
+          rangeColor={rangeColor}
+          setSeeking={setSeeking}
+          seek={seek}
         />
-        <div className="flex justify-between mt-1 mb-3">
-          <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-            {formatTime(progressValue)}
-          </span>
-          <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-            -{formatTime(Math.max(duration - progressValue, 0))}
-          </span>
-        </div>
+        <PlayTimeDisplay
+          progressValue={progressValue}
+          safeDuration={duration}
+          className="flex justify-between mt-1 mb-3"
+        />
 
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-6">
-            <button
-              onClick={goPrev}
-              disabled={currentIndex === 0}
-              className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <Icon name="chevron-double-left" size={32} />
-            </button>
+            <GoPrevButton size={32} onClick={goPrev} currentIndex={currentIndex} />
 
-            <button
+            <PlayButton
               onClick={handleTogglePlay}
+              playing={playing}
+              ready={ready}
+              buffering={buffering}
               disabled={!ready}
-              className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
-            >
-              {!ready || buffering ? (
-                <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
-              ) : playing ? (
-                <Icon name="pause" size={40} />
-              ) : (
-                <Icon name="play" size={40} />
-              )}
-            </button>
+              className="w-[45px] h-[45px] flex items-center justify-center"
+              size={8}
+            />
 
-            <button
-              className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            <GoNextButton
+              currentIndex={currentIndex}
+              tracksLength={tracks.length - 1}
+              repeatMode={repeatMode}
               onClick={goNext}
-              disabled={currentIndex >= tracksLength - 1 && repeatMode !== "all"}
-            >
-              <Icon name="chevron-double-right" size={32} />
-            </button>
+              size={32}
+            />
           </div>
 
           <div className="flex items-center gap-2 w-28">
@@ -867,56 +783,55 @@ function MusicPlayerContent() {
   const artworkUrl = currentTrack?.appleMusicMeta?.artworkUrl1000 ?? currentTrack?.appleMusicMeta?.artworkUrl100;
   const showVideo = !artworkUrl || videoOverride;
 
+  // 슬롯 위치를 매 프레임 추적 — 어떤 이유로든(가사보기/목록보기 전환, 주소창 접힘, 화면 회전 등)
+  // 레이아웃이 바뀌면 다음 프레임에 자동으로 따라감. 어떤 슬롯이 마운트돼 있는지도 매 프레임 다시 확인해서
+  // isExpanded 등 특정 state에 의존하지 않고 항상 실제로 존재하는 슬롯을 찾음.
   useEffect(() => {
     if (!showVideo) {
       setVideoRect(null);
       return;
     }
 
+    let rafId: number;
+
     const measure = () => {
       const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+      const slotEl = isDesktop
+        ? desktopAlbumSlotRef.current
+        : (miniAlbumSlotRef.current ?? expandedAlbumSlotRef.current);
 
-      let slotEl: HTMLDivElement | null;
-      if (isDesktop) {
-        slotEl = desktopAlbumSlotRef.current;
-      } else if (isExpanded) {
-        slotEl = expandedAlbumSlotRef.current;
-      } else {
-        slotEl = miniAlbumSlotRef.current;
+      if (slotEl) {
+        const rect = slotEl.getBoundingClientRect();
+        const rounded = {
+          top: Math.round(rect.top),
+          left: Math.round(rect.left),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+
+        setVideoRect((prev) => {
+          if (
+            prev &&
+            prev.top === rounded.top &&
+            prev.left === rounded.left &&
+            prev.width === rounded.width &&
+            prev.height === rounded.height
+          ) {
+            return prev;
+          }
+          return rounded;
+        });
       }
 
-      if (!slotEl) return;
-
-      const rect = slotEl.getBoundingClientRect();
-      const rounded = {
-        top: Math.round(rect.top),
-        left: Math.round(rect.left),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-
-      setVideoRect((prev) => {
-        if (
-          prev &&
-          prev.top === rounded.top &&
-          prev.left === rounded.left &&
-          prev.width === rounded.width &&
-          prev.height === rounded.height
-        ) {
-          return prev;
-        }
-        return rounded;
-      });
+      rafId = requestAnimationFrame(measure);
     };
 
-    const timeout = setTimeout(measure, 50);
-    window.addEventListener("resize", measure);
+    rafId = requestAnimationFrame(measure);
 
     return () => {
-      clearTimeout(timeout);
-      window.removeEventListener("resize", measure);
+      cancelAnimationFrame(rafId);
     };
-  }, [showVideo, isExpanded, loading, desktopPanelOpen]);
+  }, [showVideo]);
 
   const goNext = useCallback(() => {
     setCurrentIndex((i) => {
@@ -1120,7 +1035,9 @@ function MusicPlayerContent() {
         )}
       </div>
 
-      <div ref={containerRef} style={playerContainerStyle} />
+      <div style={playerContainerStyle}>
+        <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      </div>
 
       <div
         style={{
@@ -1197,104 +1114,69 @@ function MusicPlayerContent() {
               </div>
               <div className={`flex gap-2 ${desktopPanelOpen ? "justify-end" : "mt-2"}`}>
                 {artworkUrl && (
-                  <button onClick={() => setVideoOverride((prev) => !prev)} className="cursor-pointer flex-shrink-0">
-                    <Icon name="youtube" size={22} style={{ opacity: showVideo ? 1 : 0.7 }} />
-                  </button>
+                  <YoutubeButton onClick={() => setVideoOverride((prev) => !prev)} showVideo={showVideo} />
                 )}
                 {tracks.length > 1 && (
-                  <button onClick={toggleDesktopPlaylist} className="cursor-pointer flex-shrink-0">
-                    <Icon
-                      name="list"
-                      size={22}
-                      style={{ opacity: desktopPanelOpen && isPlaylistOpenDesktop ? 1 : 0.7 }}
-                    />
-                  </button>
-                )}
-                <button onClick={toggleDesktopLyrics} className="cursor-pointer flex-shrink-0">
-                  <Icon
-                    name="lyrics"
+                  <ListButton
+                    onClick={toggleDesktopPlaylist}
                     size={22}
-                    style={{ opacity: desktopPanelOpen && !isPlaylistOpenDesktop ? 1 : 0.7 }}
+                    style={{ opacity: desktopPanelOpen && isPlaylistOpenDesktop ? 1 : 0.7 }}
                   />
-                </button>
+                )}
+                <LyricsButton
+                  onClick={toggleDesktopLyrics}
+                  size={22}
+                  style={{ opacity: desktopPanelOpen && !isPlaylistOpenDesktop ? 1 : 0.7 }}
+                />
               </div>
             </div>
 
             <div className="w-full">
-              <input
-                type="range"
-                min={0}
-                max={safeDuration}
-                step={0.1}
-                value={progressValue}
-                onChange={(e) => setSeeking(Number(e.target.value))}
-                onMouseUp={(e) => {
-                  seek(Number((e.target as HTMLInputElement).value));
-                  setSeeking(null);
-                }}
-                onTouchEnd={(e) => {
-                  seek(Number((e.target as HTMLInputElement).value));
-                  setSeeking(null);
-                }}
-                className="progress-range progress-range-playhead w-full"
-                style={
-                  {
-                    background: `linear-gradient(to right, ${rangeColor} ${progressPercent}%, rgba(255,255,255,0.2) ${progressPercent}%)`,
-                    "--progress-percent": `${progressPercent}%`,
-                  } as React.CSSProperties
-                }
+              <SeekBar
+                progressValue={progressValue}
+                safeDuration={safeDuration}
+                progressPercent={progressPercent}
+                rangeColor={rangeColor}
+                setSeeking={setSeeking}
+                seek={seek}
               />
-              <div className="flex justify-between mt-1">
-                <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-                  {formatTime(progressValue)}
-                </span>
-                <span className="text-sm tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
-                  -{formatTime(Math.max(safeDuration - progressValue, 0))}
-                </span>
-              </div>
+              <PlayTimeDisplay
+                progressValue={progressValue}
+                safeDuration={duration}
+                className="flex justify-between mt-1"
+              />
             </div>
 
             <div className="w-full flex justify-between">
               <div className="flex items-center gap-6">
-                <button
-                  onClick={goPrev}
-                  disabled={currentIndex === 0}
-                  className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Icon name="chevron-double-left" size={40} />
-                </button>
+                <GoPrevButton size={40} onClick={goPrev} currentIndex={currentIndex} />
 
-                <button
+                <PlayButton
                   onClick={handleTogglePlay}
+                  playing={playing}
+                  ready={ready}
+                  buffering={buffering}
                   disabled={!ready}
-                  className="w-[45px] h-[45px] flex items-center justify-center cursor-pointer"
-                >
-                  {!ready || buffering ? (
-                    <div className="spinner w-8 h-8 rounded-full border-4 border-white/20 border-t-white" />
-                  ) : playing ? (
-                    <Icon name="pause" size={45} />
-                  ) : (
-                    <Icon name="play" size={45} />
-                  )}
-                </button>
+                  className="w-[45px] h-[45px] flex items-center justify-center"
+                  size={8}
+                />
 
-                <button
-                  className="cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                <GoNextButton
+                  currentIndex={currentIndex}
+                  tracksLength={tracks.length - 1}
+                  repeatMode={repeatMode}
                   onClick={goNext}
-                  disabled={currentIndex >= tracks.length - 1 && repeatMode !== "all"}
-                >
-                  <Icon name="chevron-double-right" size={40} />
-                </button>
+                  size={40}
+                />
               </div>
 
               <div className="flex items-center gap-2 w-40">
-                <button onClick={cycleRepeatMode} className="cursor-pointer">
-                  <Icon
-                    name={repeatMode === "one" ? "repeat-one" : "repeat"}
-                    size={20}
-                    style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
-                  />
-                </button>
+                <RepeatButton
+                  onClick={cycleRepeatMode}
+                  size={20}
+                  style={{ opacity: repeatMode === "off" ? 0.5 : 1 }}
+                  repeatMode={repeatMode}
+                />
                 <button className="cursor-pointer" onClick={toggleMute}>
                   {muted ? <Icon name="volume-mute" /> : <Icon name="volume-up" />}
                 </button>
@@ -1369,7 +1251,7 @@ function MusicPlayerContent() {
                 {isPlaylistOpenDesktop ? (
                   <PlaylistTabView tracks={tracks} currentIndex={currentIndex} onSelectTrack={selectTrack} />
                 ) : !ready || buffering ? (
-                  <LoadingDots />
+                  <LoadingDots isFull={true} />
                 ) : lyricsLang === "synced" ? (
                   <SyncedLyricsView
                     syncedLyrics={currentTrack.syncedLyrics}
@@ -1462,10 +1344,17 @@ function MusicPlayerContent() {
               setIsExpanded(true);
               setLyricsLang("playlist");
             }}
+            onShowLyrics={() => {
+              setIsExpanded(true);
+              setLyricsLang(getPreferredLyricsLang(currentTrack));
+            }}
             currentIndex={currentIndex}
             tracksLength={tracks.length}
             repeatMode={repeatMode}
             onCycleRepeat={cycleRepeatMode}
+            safeDuration={safeDuration}
+            setSeeking={setSeeking}
+            seek={seek}
           />
         )}
       </div>
