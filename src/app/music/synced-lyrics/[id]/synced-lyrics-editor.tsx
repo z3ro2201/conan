@@ -586,24 +586,33 @@ export function SyncedLyricsEditor({
                             className="ml-8 mt-1 p-2 bg-blue-50 rounded flex flex-wrap gap-2 items-center"
                           >
                             <span className="text-xs text-gray-400 w-6">{LANG_LABELS[line.language]}</span>
-                            {line.segments.map((seg, segIndex) => (
-                              <div key={segIndex} className="flex items-center gap-1 bg-white rounded px-2 py-1 border">
-                                <SegmentTimeInput
-                                  time={seg.time}
-                                  onCommit={(newTimeMs) => setSegmentTime(lineGlobalIndex, segIndex, newTimeMs)}
-                                />
-                                <span
-                                  className="text-sm"
-                                  dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(seg.text) }}
-                                />
-                                <button
-                                  onClick={() => stampSegment(lineGlobalIndex, segIndex)}
-                                  className="text-xs text-blue-500 ml-1"
+                            {line.segments.map((seg, segIndex) => {
+                              const isWhitespaceOnly = seg.text.trim().length === 0;
+                              if (isWhitespaceOnly) {
+                                return <span key={segIndex} className="w-2" />; // 카드 없이 여백만
+                              }
+                              return (
+                                <div
+                                  key={segIndex}
+                                  className="flex items-center gap-1 bg-white rounded px-2 py-1 border"
                                 >
-                                  지금!
-                                </button>
-                              </div>
-                            ))}
+                                  <SegmentTimeInput
+                                    time={seg.time}
+                                    onCommit={(newTimeMs) => setSegmentTime(lineGlobalIndex, segIndex, newTimeMs)}
+                                  />
+                                  <span
+                                    className="text-sm"
+                                    dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(seg.text) }}
+                                  />
+                                  <button
+                                    onClick={() => stampSegment(lineGlobalIndex, segIndex)}
+                                    className="text-xs text-blue-500 ml-1"
+                                  >
+                                    지금!
+                                  </button>
+                                </div>
+                              );
+                            })}
                             <div className="flex-1 gap-2 justify-end">
                               <button
                                 onClick={() => rebuildSegments(lineGlobalIndex)}
