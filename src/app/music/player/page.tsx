@@ -6,7 +6,6 @@ import { useYouTubePlayer } from "@/lib/utils/use-youtube-player";
 import { Icon } from "@/components/ui/icon";
 import { interleaveLyricsLines } from "@/lib/utils/interleave-lyrics";
 import { sanitizeRubyHtml, stripGroupTags } from "@/lib/utils/sanitize-ruby";
-
 import Link from "next/link";
 
 const MessageWindow = ({ type, text }: { type: "LOADING" | "ERROR"; text: string }) => {

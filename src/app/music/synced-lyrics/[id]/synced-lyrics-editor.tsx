@@ -451,11 +451,10 @@ export function SyncedLyricsEditor({
                   <SortableTimelineItem key={item.id} id={item.id}>
                     <div className="flex items-center gap-2 py-2 mb-1 bg-gray-100 rounded px-2 cursor-move">
                       <GripVerticalIcon size={16} className="text-gray-400" />
-                      <span className="text-sm text-gray-500 w-16">{(item.marker.time / 1000).toFixed(2)}s</span>
+                      <span className="text-sm text-gray-500 w-16" onClick={() => restampMarker(item.marker.id)}>
+                        {(item.marker.time / 1000).toFixed(2)}s
+                      </span>
                       <span className="flex-1 font-medium text-gray-600">— {item.marker.label} —</span>
-                      <Button onClick={() => restampMarker(item.marker.id)} className="text-sm">
-                        지금!
-                      </Button>
                       <button onClick={() => removeMarker(item.marker.id)} className="text-sm text-red-500">
                         삭제
                       </button>
@@ -516,10 +515,8 @@ export function SyncedLyricsEditor({
                           );
                         })}
                       </div>
-
-                      <Button onClick={() => stampPair(pair.indices)} className="mt-0.5">
-                        지금!
-                      </Button>
+                    </div>
+                    <div className="flex w-full justify-end items-center gap-2">
                       <button onClick={() => insertLineAfter(pairIndex)} className="text-sm text-blue-500 mt-1">
                         + 줄 추가
                       </button>
@@ -527,7 +524,6 @@ export function SyncedLyricsEditor({
                         삭제
                       </button>
                     </div>
-
                     {isPrecisionOpen &&
                       pair.lines.map((line) => {
                         const lineGlobalIndex = lines.indexOf(line);
@@ -541,19 +537,16 @@ export function SyncedLyricsEditor({
                             <span className="text-xs text-gray-400 w-6">{LANG_LABELS[line.language]}</span>
                             {line.segments.map((seg, segIndex) => (
                               <div key={segIndex} className="flex items-center gap-1 bg-white rounded px-2 py-1 border">
-                                <span className="text-xs text-gray-400 tabular-nums">
+                                <span
+                                  className="text-xs text-gray-400 tabular-nums"
+                                  onClick={() => stampSegment(lineGlobalIndex, segIndex)}
+                                >
                                   {(seg.time / 1000).toFixed(2)}s
                                 </span>
                                 <span
                                   className="text-sm"
                                   dangerouslySetInnerHTML={{ __html: sanitizeRubyHtml(seg.text) }}
                                 />
-                                <button
-                                  onClick={() => stampSegment(lineGlobalIndex, segIndex)}
-                                  className="text-xs text-blue-500 ml-1"
-                                >
-                                  지금!
-                                </button>
                               </div>
                             ))}
                             <button
